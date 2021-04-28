@@ -10,7 +10,7 @@ use loupe::MemoryUsage;
 use std::sync::{Arc, Mutex};
 use wasmer_compiler::{CompileError, Features, Triple};
 #[cfg(feature = "compiler")]
-use wasmer_compiler::{CompileModuleInfo, ModuleEnvironment};
+use wasmer_compiler::{CompileModuleInfo, ModuleEnvironment, ModuleMiddlewareChain};
 use wasmer_engine::{
     register_frame_info, Artifact, DeserializeError, FunctionExtent, GlobalFrameInfoRegistration,
     SerializeError,
@@ -23,7 +23,8 @@ use wasmer_types::{
     TableIndex,
 };
 use wasmer_vm::{
-    FunctionBodyPtr, MemoryStyle, ModuleInfo, TableStyle, VMSharedSignatureIndex, VMTrampoline,
+    FuncDataRegistry, FunctionBodyPtr, MemoryStyle, ModuleInfo, TableStyle, VMSharedSignatureIndex,
+    VMTrampoline,
 };
 
 /// A compiled wasm module, ready to be instantiated.
@@ -35,6 +36,7 @@ pub struct JITArtifact {
     finished_function_call_trampolines: BoxedSlice<SignatureIndex, VMTrampoline>,
     finished_dynamic_function_trampolines: BoxedSlice<FunctionIndex, FunctionBodyPtr>,
     signatures: BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
+    func_data_registry: Arc<FuncDataRegistry>,
     frame_info_registration: Mutex<Option<GlobalFrameInfoRegistration>>,
     finished_function_lengths: BoxedSlice<LocalFunctionIndex, usize>,
 }
@@ -60,32 +62,35 @@ impl JITArtifact {
 
         let translation = environ.translate(data).map_err(CompileError::Wasm)?;
 
-        let memory_styles: PrimaryMap<MemoryIndex, MemoryStyle> = translation
-            .module
+        let compiler = inner_jit.compiler()?;
+
+        // We try to apply the middleware first
+        let mut module = translation.module;
+        let middlewares = compiler.get_middlewares();
+        middlewares.apply_on_module_info(&mut module);
+
+        let memory_styles: PrimaryMap<MemoryIndex, MemoryStyle> = module
             .memories
             .values()
             .map(|memory_type| tunables.memory_style(memory_type))
             .collect();
-        let table_styles: PrimaryMap<TableIndex, TableStyle> = translation
-            .module
+        let table_styles: PrimaryMap<TableIndex, TableStyle> = module
             .tables
             .values()
             .map(|table_type| tunables.table_style(table_type))
             .collect();
 
-        let mut compile_info = CompileModuleInfo {
-            module: Arc::new(translation.module),
+        let compile_info = CompileModuleInfo {
+            module: Arc::new(module),
             features: features.clone(),
             memory_styles,
             table_styles,
         };
 
-        let compiler = inner_jit.compiler()?;
-
         // Compile the Module
         let compilation = compiler.compile_module(
             &jit.target(),
-            &mut compile_info,
+            &compile_info,
             // SAFETY: Calling `unwrap` is correct since
             // `environ.translate()` above will write some data into
             // `module_translation_state`.
@@ -226,6 +231,7 @@ impl JITArtifact {
         let finished_dynamic_function_trampolines =
             finished_dynamic_function_trampolines.into_boxed_slice();
         let signatures = signatures.into_boxed_slice();
+        let func_data_registry = inner_jit.func_data().clone();
 
         Ok(Self {
             serializable,
@@ -235,6 +241,7 @@ impl JITArtifact {
             signatures,
             frame_info_registration: Mutex::new(None),
             finished_function_lengths,
+            func_data_registry,
         })
     }
 
@@ -314,6 +321,9 @@ impl Artifact for JITArtifact {
         &self.signatures
     }
 
+    fn func_data_registry(&self) -> &FuncDataRegistry {
+        &self.func_data_registry
+    }
     fn serialize(&self) -> Result<Vec<u8>, SerializeError> {
         // let mut s = flexbuffers::FlexbufferSerializer::new();
         // self.serializable.serialize(&mut s).map_err(|e| SerializeError::Generic(format!("{:?}", e)));
