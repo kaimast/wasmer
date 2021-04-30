@@ -70,6 +70,8 @@ lazy_static = "1.4"
 wasmer-engine-dummy = { path = "tests/lib/engine-dummy" }
 tempfile = "3.1"
 loupe = "0.1"
+smol = "1"
+switcheroo = "0.2"
 
 [features]
 # Don't add the compiler features in default, please add them on the Makefile
@@ -277,3 +279,8 @@ required-features = ["cranelift"]
 name = "features"
 path = "examples/features.rs"
 required-features = ["cranelift"]
+
+[[example]]
+name = "async"
+path = "examples/async.rs"
+required-features = ["cranelift", "async"]

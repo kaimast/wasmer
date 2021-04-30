@@ -162,6 +162,7 @@ impl Instance {
         &self,
         func_name: &str,
         stack: Stack,
+        //FIXME support passing arguments params: &[Val]
     ) -> Result<Box<[crate::Val]>, RuntimeError> {
         use crate::externals::function::FunctionDefinition;
         use crate::Val;
@@ -181,7 +182,6 @@ impl Instance {
                 }
 
                 let params = &[];
-
                 let mut results = vec![Val::null(); func.result_arity()];
 
                 match &func.definition {
