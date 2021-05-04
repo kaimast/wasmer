@@ -125,7 +125,7 @@ impl FuncTrampoline {
             mem_buf_slice,
             FUNCTION_SECTION,
             RelocationTarget::LocalFunc(LocalFunctionIndex::from_u32(0)),
-            |name: &String| {
+            |name: &str| {
                 Err(CompileError::Codegen(format!(
                     "trampoline generation produced reference to unknown function {}",
                     name
@@ -249,7 +249,7 @@ impl FuncTrampoline {
             mem_buf_slice,
             FUNCTION_SECTION,
             RelocationTarget::LocalFunc(LocalFunctionIndex::from_u32(0)),
-            |name: &String| {
+            |name: &str| {
                 Err(CompileError::Codegen(format!(
                     "trampoline generation produced reference to unknown function {}",
                     name

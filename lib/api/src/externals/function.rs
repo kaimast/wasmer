@@ -12,39 +12,14 @@ pub use inner::{UnsafeMutableEnv, WithUnsafeMutableEnv};
 
 use loupe::MemoryUsage;
 use std::cmp::max;
-use std::ffi::c_void;
 use std::fmt;
 use std::sync::Arc;
 use wasmer_engine::{Export, ExportFunction, ExportFunctionMetadata};
 use wasmer_vm::{
     raise_user_trap, resume_panic, wasmer_call_trampoline, ImportInitializerFuncPtr,
-    VMCallerCheckedAnyfunc, VMDynamicFunctionContext, VMExportFunction, VMFuncRef, VMFunctionBody,
+    VMCallerCheckedAnyfunc, VMDynamicFunctionContext, VMFuncRef, VMFunction, VMFunctionBody,
     VMFunctionEnvironment, VMFunctionKind, VMTrampoline,
 };
-
-/// A function defined in the Wasm module
-#[derive(Clone, PartialEq, MemoryUsage)]
-pub struct WasmFunctionDefinition {
-    // Address of the trampoline to do the call.
-    #[loupe(skip)]
-    pub(crate) trampoline: VMTrampoline,
-}
-
-/// A function defined in the Host
-#[derive(Clone, PartialEq, MemoryUsage)]
-pub struct HostFunctionDefinition {
-    /// If the host function has a custom environment attached
-    pub(crate) has_env: bool,
-}
-
-/// The inner helper
-#[derive(Clone, PartialEq, MemoryUsage)]
-pub enum FunctionDefinition {
-    /// A function defined in the Wasm side
-    Wasm(WasmFunctionDefinition),
-    /// A function defined in the Host side
-    Host(HostFunctionDefinition),
-}
 
 /// A WebAssembly `function` instance.
 ///
@@ -66,7 +41,6 @@ pub enum FunctionDefinition {
 #[derive(Clone, PartialEq, MemoryUsage)]
 pub struct Function {
     pub(crate) store: Store,
-    pub(crate) definition: FunctionDefinition,
     pub(crate) exported: ExportFunction,
 }
 
@@ -180,6 +154,8 @@ where
     (env, metadata)
 }
 
+impl WasmerEnv for WithoutEnv {}
+
 impl Function {
     /// Creates a new host `Function` (dynamic) with the provided signature.
     ///
@@ -219,69 +195,9 @@ impl Function {
         FT: Into<FunctionType>,
         F: Fn(&[Val]) -> Result<Vec<Val>, RuntimeError> + 'static + Send + Sync,
     {
-        let ty: FunctionType = ty.into();
-        let dynamic_ctx: VMDynamicFunctionContext<DynamicFunctionWithoutEnv> =
-            VMDynamicFunctionContext::from_context(DynamicFunctionWithoutEnv {
-                func: Arc::new(func),
-                store: store.clone(),
-                function_type: ty.clone(),
-            });
-        // We don't yet have the address with the Wasm ABI signature.
-        // The engine linker will replace the address with one pointing to a
-        // generated dynamic trampoline.
-        let address = std::ptr::null() as *const VMFunctionBody;
-        let host_env = Box::into_raw(Box::new(dynamic_ctx)) as *mut _;
-        let vmctx = VMFunctionEnvironment { host_env };
-        let host_env_clone_fn: fn(*mut c_void) -> *mut c_void = |ptr| {
-            let duped_env: VMDynamicFunctionContext<DynamicFunctionWithoutEnv> = unsafe {
-                let ptr: *mut VMDynamicFunctionContext<DynamicFunctionWithoutEnv> = ptr as _;
-                let item: &VMDynamicFunctionContext<DynamicFunctionWithoutEnv> = &*ptr;
-                item.clone()
-            };
-            Box::into_raw(Box::new(duped_env)) as _
-        };
-
-        let host_env_drop_fn: fn(*mut c_void) = |ptr: *mut c_void| {
-            unsafe {
-                Box::from_raw(ptr as *mut VMDynamicFunctionContext<DynamicFunctionWithoutEnv>)
-            };
-        };
-
-        #[cfg(feature = "async")]
-        let host_env_set_yielder_fn = |_, _| {
-            //no-op
-            println!("No-op");
-        };
-
-        Self {
-            store: store.clone(),
-            definition: FunctionDefinition::Host(HostFunctionDefinition { has_env: false }),
-            exported: ExportFunction {
-                metadata: Some(Arc::new(
-                    // # Safety
-                    // - All these functions work on all threads
-                    // - The host env is `Send`.
-                    unsafe {
-                        ExportFunctionMetadata::new(
-                            host_env,
-                            None,
-                            host_env_clone_fn,
-                            #[cfg(feature = "async")]
-                            host_env_set_yielder_fn,
-                            host_env_drop_fn,
-                        )
-                    },
-                )),
-                vm_function: VMExportFunction {
-                    address,
-                    kind: VMFunctionKind::Dynamic,
-                    vmctx,
-                    signature: ty,
-                    call_trampoline: None,
-                    instance_ref: None,
-                },
-            },
-        }
+        let wrapped_func =
+            move |_env: &WithoutEnv, args: &[Val]| -> Result<Vec<Val>, RuntimeError> { func(args) };
+        Self::new_with_env(store, ty, WithoutEnv, wrapped_func)
     }
 
     /// Creates a new host `Function` (dynamic) with the provided signature and environment.
@@ -336,8 +252,8 @@ impl Function {
         Env: Sized + WasmerEnv + 'static,
     {
         let ty: FunctionType = ty.into();
-        let dynamic_ctx: VMDynamicFunctionContext<DynamicFunctionWithEnv<Env>> =
-            VMDynamicFunctionContext::from_context(DynamicFunctionWithEnv {
+        let dynamic_ctx: VMDynamicFunctionContext<DynamicFunction<Env>> =
+            VMDynamicFunctionContext::from_context(DynamicFunction {
                 env: Box::new(env),
                 func: Arc::new(func),
                 store: store.clone(),
@@ -345,7 +261,7 @@ impl Function {
             });
 
         let import_init_function_ptr: for<'a> fn(&'a mut _, &'a _) -> Result<(), _> =
-            |env: &mut VMDynamicFunctionContext<DynamicFunctionWithEnv<Env>>,
+            |env: &mut VMDynamicFunctionContext<DynamicFunction<Env>>,
              instance: &crate::Instance| {
                 Env::init_with_instance(&mut *env.ctx.env, instance)
             };
@@ -357,7 +273,7 @@ impl Function {
                 env.set_yielder(yielder_ptr);
             };
 
-            build_export_function_metadata::<VMDynamicFunctionContext<DynamicFunctionWithEnv<Env>>>(
+            build_export_function_metadata::<VMDynamicFunctionContext<DynamicFunction<Env>>>(
                 dynamic_ctx,
                 import_init_function_ptr,
                 host_env_set_yielder_fn,
@@ -366,7 +282,7 @@ impl Function {
 
         #[cfg(not(feature = "async"))]
         let (host_env, metadata) = build_export_function_metadata::<
-            VMDynamicFunctionContext<DynamicFunctionWithEnv<Env>>,
+            VMDynamicFunctionContext<DynamicFunction<Env>>,
         >(dynamic_ctx, import_init_function_ptr);
 
         // We don't yet have the address with the Wasm ABI signature.
@@ -379,10 +295,9 @@ impl Function {
 
         Self {
             store: store.clone(),
-            definition: FunctionDefinition::Host(HostFunctionDefinition { has_env: true }),
             exported: ExportFunction {
                 metadata: Some(Arc::new(metadata)),
-                vm_function: VMExportFunction {
+                vm_function: VMFunction {
                     address,
                     kind: VMFunctionKind::Dynamic,
                     vmctx,
@@ -430,13 +345,11 @@ impl Function {
 
         Self {
             store: store.clone(),
-            definition: FunctionDefinition::Host(HostFunctionDefinition { has_env: false }),
-
             exported: ExportFunction {
                 // TODO: figure out what's going on in this function: it takes an `Env`
                 // param but also marks itself as not having an env
                 metadata: None,
-                vm_function: VMExportFunction {
+                vm_function: VMFunction {
                     address,
                     vmctx,
                     signature,
@@ -507,10 +420,9 @@ impl Function {
 
         Self {
             store: store.clone(),
-            definition: FunctionDefinition::Host(HostFunctionDefinition { has_env: true }),
             exported: ExportFunction {
                 metadata: Some(Arc::new(metadata)),
-                vm_function: VMExportFunction {
+                vm_function: VMFunction {
                     address,
                     kind: VMFunctionKind::Static,
                     vmctx,
@@ -555,10 +467,9 @@ impl Function {
 
         Self {
             store: store.clone(),
-            definition: FunctionDefinition::Host(HostFunctionDefinition { has_env: true }),
             exported: ExportFunction {
                 metadata: Some(Arc::new(metadata)),
-                vm_function: VMExportFunction {
+                vm_function: VMFunction {
                     address,
                     kind: VMFunctionKind::Static,
                     vmctx,
@@ -598,7 +509,7 @@ impl Function {
 
     pub(crate) fn call_wasm(
         &self,
-        func: &WasmFunctionDefinition,
+        trampoline: VMTrampoline,
         params: &[Val],
         results: &mut [Val],
     ) -> Result<(), RuntimeError> {
@@ -646,7 +557,7 @@ impl Function {
         if let Err(error) = unsafe {
             wasmer_call_trampoline(
                 self.exported.vm_function.vmctx,
-                func.trampoline,
+                trampoline,
                 self.exported.vm_function.address,
                 values_vec.as_mut_ptr() as *mut u8,
             )
@@ -735,34 +646,19 @@ impl Function {
     /// assert_eq!(sum.call(&[Value::I32(1), Value::I32(2)]).unwrap().to_vec(), vec![Value::I32(3)]);
     /// ```
     pub fn call(&self, params: &[Val]) -> Result<Box<[Val]>, RuntimeError> {
-        let mut results = vec![Val::null(); self.result_arity()];
-
-        match &self.definition {
-            FunctionDefinition::Wasm(wasm) => {
-                self.call_wasm(&wasm, params, &mut results)?;
-            }
-            // TODO: we can trivially hit this, look into it
-            _ => unimplemented!("The function definition isn't supported for the moment"),
+        if let Some(trampoline) = self.exported.vm_function.call_trampoline {
+            let mut results = vec![Val::null(); self.result_arity()];
+            self.call_wasm(trampoline, params, &mut results)?;
+            return Ok(results.into_boxed_slice());
         }
 
-        Ok(results.into_boxed_slice())
+        unimplemented!("The function definition isn't supported for the moment");
     }
 
     pub(crate) fn from_vm_export(store: &Store, wasmer_export: ExportFunction) -> Self {
-        if let Some(trampoline) = wasmer_export.vm_function.call_trampoline {
-            Self {
-                store: store.clone(),
-                definition: FunctionDefinition::Wasm(WasmFunctionDefinition { trampoline }),
-                exported: wasmer_export,
-            }
-        } else {
-            Self {
-                store: store.clone(),
-                definition: FunctionDefinition::Host(HostFunctionDefinition {
-                    has_env: !wasmer_export.vm_function.vmctx.is_null(),
-                }),
-                exported: wasmer_export,
-            }
+        Self {
+            store: store.clone(),
+            exported: wasmer_export,
         }
     }
 
@@ -884,11 +780,7 @@ impl Function {
             }
         }
 
-        Ok(NativeFunc::new(
-            self.store.clone(),
-            self.exported.clone(),
-            self.definition.clone(),
-        ))
+        Ok(NativeFunc::new(self.store.clone(), self.exported.clone()))
     }
 
     #[track_caller]
@@ -926,27 +818,7 @@ pub(crate) trait VMDynamicFunction: Send + Sync {
     fn store(&self) -> &Store;
 }
 
-#[derive(Clone)]
-pub(crate) struct DynamicFunctionWithoutEnv {
-    #[allow(clippy::type_complexity)]
-    func: Arc<dyn Fn(&[Val]) -> Result<Vec<Val>, RuntimeError> + 'static + Send + Sync>,
-    function_type: FunctionType,
-    store: Store,
-}
-
-impl VMDynamicFunction for DynamicFunctionWithoutEnv {
-    fn call(&self, args: &[Val]) -> Result<Vec<Val>, RuntimeError> {
-        (*self.func)(&args)
-    }
-    fn function_type(&self) -> &FunctionType {
-        &self.function_type
-    }
-    fn store(&self) -> &Store {
-        &self.store
-    }
-}
-
-pub(crate) struct DynamicFunctionWithEnv<Env>
+pub(crate) struct DynamicFunction<Env>
 where
     Env: Sized + 'static + Send + Sync,
 {
@@ -957,7 +829,7 @@ where
     env: Box<Env>,
 }
 
-impl<Env: Sized + Clone + 'static + Send + Sync> Clone for DynamicFunctionWithEnv<Env> {
+impl<Env: Sized + Clone + 'static + Send + Sync> Clone for DynamicFunction<Env> {
     fn clone(&self) -> Self {
         Self {
             env: self.env.clone(),
@@ -968,7 +840,7 @@ impl<Env: Sized + Clone + 'static + Send + Sync> Clone for DynamicFunctionWithEn
     }
 }
 
-impl<Env> VMDynamicFunction for DynamicFunctionWithEnv<Env>
+impl<Env> VMDynamicFunction for DynamicFunction<Env>
 where
     Env: Sized + 'static + Send + Sync,
 {
@@ -1371,6 +1243,7 @@ mod inner {
 
     /// An empty struct to help Rust typing to determine
     /// when a `HostFunction` does not have an environment.
+    #[derive(Clone)]
     pub struct WithoutEnv;
 
     impl HostFunctionKind for WithoutEnv {}

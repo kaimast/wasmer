@@ -164,8 +164,6 @@ impl Instance {
         stack: Stack,
         //FIXME support passing arguments params: &[Val]
     ) -> Result<Box<[crate::Val]>, RuntimeError> {
-        use crate::externals::function::FunctionDefinition;
-        use crate::Val;
 
         let mut task = async_wormhole::AsyncWormhole::new(
             stack,
@@ -182,20 +180,7 @@ impl Instance {
                 }
 
                 let params = &[];
-                let mut results = vec![Val::null(); func.result_arity()];
-
-                match &func.definition {
-                    FunctionDefinition::Wasm(wasm) => {
-                        let res = func.call_wasm(&wasm, params, &mut results);
-
-                        if let Err(e) = res {
-                            return Err(e);
-                        }
-                    }
-                    _ => unimplemented!("The function definition isn't supported for the moment"),
-                }
-
-                Ok(results.into_boxed_slice())
+                func.call(params)
             },
         )
         .expect("Failed to create async function call");
