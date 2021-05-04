@@ -142,7 +142,7 @@ impl VMExternRef {
         if self.0.is_null() {
             0
         } else {
-            unsafe { (&*self.0).strong.load(atomic::Ordering::SeqCst) }
+            unsafe { (*self.0).strong.load(atomic::Ordering::SeqCst) }
         }
     }
 }
@@ -214,7 +214,7 @@ impl VMExternRefInner {
         // [1]: https://www.boost.org/doc/libs/1_55_0/doc/html/atomic/usage_examples.html
         atomic::fence(atomic::Ordering::Acquire);
 
-        return true;
+        true
     }
 }
 

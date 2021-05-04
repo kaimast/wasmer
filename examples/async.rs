@@ -1,17 +1,17 @@
-use wasmer::{imports, wat2wasm, Instance, Module, Function, Store, LazyInit, Yielder, WasmerEnv};
+use wasmer::{imports, wat2wasm, Function, Instance, LazyInit, Module, Store, WasmerEnv, Yielder};
 use wasmer_compiler_cranelift::Cranelift;
 use wasmer_engine_jit::JIT;
 
 use switcheroo::stack::Stack;
 
-#[ derive(Clone, Default, WasmerEnv) ]
+#[derive(Clone, Default, WasmerEnv)]
 struct AsyncEnv {
-    #[ wasmer(yielder) ]
+    #[wasmer(yielder)]
     yielder: LazyInit<Yielder>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-   // Let's declare the Wasm module with the text representation.
+    // Let's declare the Wasm module with the text representation.
     let wasm_bytes = wat2wasm(
         br#"
         (module
@@ -40,9 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Calling `my_async_fn`...");
         let yielder = env.yielder.get_ref().unwrap().get();
 
-        let result = yielder.async_suspend(async move {
-            52 * a
-        });
+        let result = yielder.async_suspend(async move { 52 * a });
 
         println!("Result of `my_async_fn`: {:?}", result);
 
@@ -65,9 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let instance = Instance::new(&module, &import_object)?;
     let stack = switcheroo::stack::EightMbStack::new()?;
 
-    let result = smol::block_on(async move {
-        instance.call_with_stack("call_func", stack).await
-    })?;
+    let result = smol::block_on(async move { instance.call_with_stack("call_func", stack).await })?;
 
     let result = result[0].unwrap_i32();
     println!("Results of `call_func`: {:?}", result);

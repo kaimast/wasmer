@@ -164,7 +164,6 @@ impl Instance {
         stack: Stack,
         //FIXME support passing arguments params: &[Val]
     ) -> Result<Box<[crate::Val]>, RuntimeError> {
-
         let mut task = async_wormhole::AsyncWormhole::new(
             stack,
             |yielder| -> Result<Box<[crate::Val]>, RuntimeError> {
@@ -187,11 +186,11 @@ impl Instance {
 
         {
             use std::cell::Cell;
-            use wasmer_vm::{take_tls, restore_tls};
+            use wasmer_vm::{restore_tls, take_tls};
 
             let ptr: u64 = {
                 let ptr = take_tls().into_inner();
-                unsafe{ std::mem::transmute(ptr) }
+                unsafe { std::mem::transmute(ptr) }
             };
 
             let tls_store = Mutex::new((false, ptr));
@@ -201,13 +200,13 @@ impl Instance {
 
                 if tls_store.0 {
                     let ptr = take_tls().into_inner();
-                    tls_store.1 = unsafe{ std::mem::transmute(ptr) };
+                    tls_store.1 = unsafe { std::mem::transmute(ptr) };
                     tls_store.0 = false;
                 } else {
                     let mut value = 0;
                     std::mem::swap(&mut value, &mut tls_store.1);
 
-                    let value = unsafe{ std::mem::transmute(value) };
+                    let value = unsafe { std::mem::transmute(value) };
                     restore_tls(Cell::new(value));
 
                     tls_store.0 = true;

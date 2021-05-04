@@ -13,16 +13,15 @@ pub struct ArchivableIndexMap<K: Hash + Eq + Archive, V: Archive> {
 }
 
 impl<K: Hash + Eq + Archive + Clone, V: Archive> From<IndexMap<K, V>> for ArchivableIndexMap<K, V> {
-    fn from(it: IndexMap<K, V>) -> ArchivableIndexMap<K, V> {
-        let mut r = ArchivableIndexMap {
+    fn from(it: IndexMap<K, V>) -> Self {
+        let mut r = Self {
             indices: HashMap::new(),
             entries: Vec::new(),
         };
-        let mut i: u64 = 0;
-        for (k, v) in it.into_iter() {
-            r.indices.insert(k.clone(), i);
+
+        for (i, (k, v)) in it.into_iter().enumerate() {
+            r.indices.insert(k.clone(), i as u64);
             r.entries.push((k, v));
-            i += 1;
         }
         r
     }

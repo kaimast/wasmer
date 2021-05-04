@@ -78,9 +78,7 @@ pub trait WasmValueType: std::fmt::Debug + 'static {
 impl WasmValueType for () {
     unsafe fn write_value_to(&self, _p: *mut i128) {}
 
-    unsafe fn read_value_from(_store: &dyn std::any::Any, _p: *const i128) -> Self {
-        ()
-    }
+    unsafe fn read_value_from(_store: &dyn std::any::Any, _p: *const i128) -> Self {}
 }
 
 impl<T> Value<T>
