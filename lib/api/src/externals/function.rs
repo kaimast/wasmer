@@ -13,6 +13,7 @@ pub use inner::{UnsafeMutableEnv, WithUnsafeMutableEnv};
 use loupe::MemoryUsage;
 use std::cmp::max;
 use std::fmt;
+use std::ffi::c_void;
 use std::sync::Arc;
 use wasmer_engine::{Export, ExportFunction, ExportFunctionMetadata};
 use wasmer_vm::{
@@ -20,6 +21,7 @@ use wasmer_vm::{
     VMCallerCheckedAnyfunc, VMDynamicFunctionContext, VMFuncRef, VMFunction, VMFunctionBody,
     VMFunctionEnvironment, VMFunctionKind, VMTrampoline,
 };
+
 
 /// A WebAssembly `function` instance.
 ///
@@ -75,15 +77,15 @@ fn build_export_function_metadata<Env>(
         &'a mut Env,
         &'a crate::Instance,
     ) -> Result<(), crate::HostEnvInitError>,
-    host_env_set_yielder_fn: fn(*mut std::ffi::c_void, *const std::ffi::c_void),
-) -> (*mut std::ffi::c_void, ExportFunctionMetadata)
+    host_env_set_yielder_fn: fn(*mut c_void, *const c_void),
+) -> (*mut c_void, ExportFunctionMetadata)
 where
     Env: Clone + Sized + 'static + Send + Sync,
 {
     let import_init_function_ptr = Some(unsafe {
         std::mem::transmute::<_, ImportInitializerFuncPtr>(import_init_function_ptr)
     });
-    let host_env_clone_fn: fn(*mut std::ffi::c_void) -> *mut std::ffi::c_void = |ptr| {
+    let host_env_clone_fn: fn(*mut c_void) -> *mut c_void = |ptr| {
         let env_ref: &Env = unsafe {
             ptr.cast::<Env>()
                 .as_ref()
@@ -91,7 +93,7 @@ where
         };
         Box::into_raw(Box::new(env_ref.clone())) as _
     };
-    let host_env_drop_fn: fn(*mut std::ffi::c_void) = |ptr| {
+    let host_env_drop_fn: fn(*mut c_void) = |ptr| {
         unsafe { Box::from_raw(ptr.cast::<Env>()) };
     };
     let env = Box::into_raw(Box::new(env)) as _;
