@@ -12,8 +12,8 @@ pub use inner::{UnsafeMutableEnv, WithUnsafeMutableEnv};
 
 use loupe::MemoryUsage;
 use std::cmp::max;
-use std::fmt;
 use std::ffi::c_void;
+use std::fmt;
 use std::sync::Arc;
 use wasmer_engine::{Export, ExportFunction, ExportFunctionMetadata};
 use wasmer_vm::{
@@ -21,7 +21,6 @@ use wasmer_vm::{
     VMCallerCheckedAnyfunc, VMDynamicFunctionContext, VMFuncRef, VMFunction, VMFunctionBody,
     VMFunctionEnvironment, VMFunctionKind, VMTrampoline,
 };
-
 
 /// A WebAssembly `function` instance.
 ///
