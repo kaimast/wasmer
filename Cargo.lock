@@ -182,8 +182,7 @@ checksum = "e91831deabf0d6d7ec49552e489aed63b7456a7a3c46cff62adad428110b0af0"
 [[package]]
 name = "async-wormhole"
 version = "0.3.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9aca78e401fd97c8a58823d5fb1a67e25b7386345680ca399029ca3cee93fab0"
+source = "git+https://github.com/kaimast/async-wormhole.git?branch=fix-asm#565488c159ca7f6b60b3e7d22bd71b9cdb906c43"
 dependencies = [
  "switcheroo",
 ]
@@ -2211,8 +2210,7 @@ checksum = "1e81da0851ada1f3e9d4312c704aa4f8806f0f9d69faaf8df2f3464b4a9437c2"
 [[package]]
 name = "switcheroo"
 version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ead82a5c696b6e99136257afedf3689e40f15738cbd91227045940c6df8767c0"
+source = "git+https://github.com/kaimast/async-wormhole.git?branch=fix-asm#565488c159ca7f6b60b3e7d22bd71b9cdb906c43"
 dependencies = [
  "libc",
  "winapi",
@@ -2587,7 +2585,6 @@ dependencies = [
  "libc",
  "loupe",
  "more-asserts",
- "switcheroo",
  "target-lexicon",
  "tempfile",
  "thiserror",
@@ -2987,6 +2984,7 @@ name = "wasmer-workspace"
 version = "1.0.2"
 dependencies = [
  "anyhow",
+ "async-wormhole",
  "blake3",
  "build-deps",
  "cfg-if 1.0.0",
@@ -2996,7 +2994,6 @@ dependencies = [
  "loupe",
  "rustc_version 0.3.3",
  "smol",
- "switcheroo",
  "tempfile",
  "test-generator",
  "wasmer",

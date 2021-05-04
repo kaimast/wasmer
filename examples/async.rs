@@ -2,7 +2,7 @@ use wasmer::{imports, wat2wasm, Function, Instance, LazyInit, Module, Store, Was
 use wasmer_compiler_cranelift::Cranelift;
 use wasmer_engine_jit::JIT;
 
-use switcheroo::stack::Stack;
+use async_wormhole::stack::{EightMbStack, Stack};
 
 #[derive(Clone, Default, WasmerEnv)]
 struct AsyncEnv {
@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Let's instantiate the Wasm module.
     let instance = Instance::new(&module, &import_object)?;
-    let stack = switcheroo::stack::EightMbStack::new()?;
+    let stack = EightMbStack::new()?;
 
     let result = smol::block_on(async move { instance.call_with_stack("call_func", stack).await })?;
 

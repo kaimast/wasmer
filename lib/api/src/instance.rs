@@ -158,7 +158,7 @@ impl Instance {
 
     ///TODO
     #[cfg(feature = "async")]
-    pub async fn call_with_stack<Stack: switcheroo::stack::Stack + Unpin>(
+    pub async fn call_with_stack<Stack: async_wormhole::stack::Stack + Unpin>(
         &self,
         func_name: &str,
         stack: Stack,

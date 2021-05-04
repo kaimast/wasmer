@@ -71,7 +71,7 @@ wasmer-engine-dummy = { path = "tests/lib/engine-dummy" }
 tempfile = "3.1"
 loupe = "0.1"
 smol = "1"
-switcheroo = "0.2"
+async-wormhole = { git="https://github.com/kaimast/async-wormhole.git", branch="fix-asm"}
 
 [features]
 # Don't add the compiler features in default, please add them on the Makefile
