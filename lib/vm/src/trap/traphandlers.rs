@@ -712,7 +712,7 @@ impl CallThreadState {
             self.handling_trap.set(false);
             return ptr::null();
         }
-        let backtrace = Backtrace::new_unresolved();
+        let backtrace = Backtrace::default();//FIXME Backtrace::new_unresolved();
         self.reset_guard_page.set(reset_guard_page);
         self.unwind.replace(UnwindReason::RuntimeTrap {
             backtrace,

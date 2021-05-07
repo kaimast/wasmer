@@ -182,7 +182,7 @@ checksum = "e91831deabf0d6d7ec49552e489aed63b7456a7a3c46cff62adad428110b0af0"
 [[package]]
 name = "async-wormhole"
 version = "0.3.6"
-source = "git+https://github.com/kaimast/async-wormhole.git?branch=fix-asm#565488c159ca7f6b60b3e7d22bd71b9cdb906c43"
+source = "git+https://github.com/lunatic-solutions/async-wormhole.git#70368fbed8ec8babe7bd9809ce3a70277bf40fb8"
 dependencies = [
  "switcheroo",
 ]
@@ -2210,7 +2210,7 @@ checksum = "1e81da0851ada1f3e9d4312c704aa4f8806f0f9d69faaf8df2f3464b4a9437c2"
 [[package]]
 name = "switcheroo"
 version = "0.2.8"
-source = "git+https://github.com/kaimast/async-wormhole.git?branch=fix-asm#565488c159ca7f6b60b3e7d22bd71b9cdb906c43"
+source = "git+https://github.com/lunatic-solutions/async-wormhole.git#70368fbed8ec8babe7bd9809ce3a70277bf40fb8"
 dependencies = [
  "libc",
  "winapi",
