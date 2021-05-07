@@ -67,6 +67,8 @@ impl Mmap {
             return Ok(Self::new());
         }
 
+        log::trace!("Memory mapping {} bytes", mapping_size);
+
         Ok(if accessible_size == mapping_size {
             // Allocate a single read-write region at once.
             let ptr = unsafe {
@@ -138,6 +140,8 @@ impl Mmap {
         if mapping_size == 0 {
             return Ok(Self::new());
         }
+
+        log::trace!("Memory mapping {} bytes", mapping_size);
 
         Ok(if accessible_size == mapping_size {
             // Allocate a single read-write region at once.
@@ -263,6 +267,8 @@ impl Drop for Mmap {
     #[cfg(not(target_os = "windows"))]
     fn drop(&mut self) {
         if self.len != 0 {
+            log::trace!("Memory unmapping {} bytes", self.len);
+
             let r = unsafe { libc::munmap(self.ptr as *mut libc::c_void, self.len) };
             assert_eq!(r, 0, "munmap failed: {}", io::Error::last_os_error());
         }
@@ -271,6 +277,8 @@ impl Drop for Mmap {
     #[cfg(target_os = "windows")]
     fn drop(&mut self) {
         if self.len != 0 {
+            log::trace!("Memory unmapping {} bytes", self.len);
+
             use winapi::ctypes::c_void;
             use winapi::um::memoryapi::VirtualFree;
             use winapi::um::winnt::MEM_RELEASE;
