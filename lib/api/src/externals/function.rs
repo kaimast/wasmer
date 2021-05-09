@@ -69,57 +69,14 @@ impl wasmer_types::WasmValueType for Function {
     }
 }
 
-#[cfg(feature = "async")]
 fn build_export_function_metadata<Env>(
     env: Env,
     import_init_function_ptr: for<'a> fn(
         &'a mut Env,
         &'a crate::Instance,
     ) -> Result<(), crate::HostEnvInitError>,
+    #[cfg(feature = "async")]
     host_env_set_yielder_fn: fn(*mut c_void, *const c_void),
-) -> (*mut c_void, ExportFunctionMetadata)
-where
-    Env: Clone + Sized + 'static + Send + Sync,
-{
-    let import_init_function_ptr = Some(unsafe {
-        std::mem::transmute::<_, ImportInitializerFuncPtr>(import_init_function_ptr)
-    });
-    let host_env_clone_fn: fn(*mut c_void) -> *mut c_void = |ptr| {
-        let env_ref: &Env = unsafe {
-            ptr.cast::<Env>()
-                .as_ref()
-                .expect("`ptr` to the environment is null when cloning it")
-        };
-        Box::into_raw(Box::new(env_ref.clone())) as _
-    };
-    let host_env_drop_fn: fn(*mut c_void) = |ptr| {
-        unsafe { Box::from_raw(ptr.cast::<Env>()) };
-    };
-    let env = Box::into_raw(Box::new(env)) as _;
-
-    // # Safety
-    // - All these functions work on all threads
-    // - The host env is `Send`.
-    let metadata = unsafe {
-        ExportFunctionMetadata::new(
-            env,
-            import_init_function_ptr,
-            host_env_clone_fn,
-            host_env_set_yielder_fn,
-            host_env_drop_fn,
-        )
-    };
-
-    (env, metadata)
-}
-
-#[cfg(not(feature = "async"))]
-fn build_export_function_metadata<Env>(
-    env: Env,
-    import_init_function_ptr: for<'a> fn(
-        &'a mut Env,
-        &'a crate::Instance,
-    ) -> Result<(), crate::HostEnvInitError>,
 ) -> (*mut c_void, ExportFunctionMetadata)
 where
     Env: Clone + Sized + 'static + Send + Sync,
@@ -148,6 +105,8 @@ where
             env,
             import_init_function_ptr,
             host_env_clone_fn,
+            #[cfg(feature="async")]
+            host_env_set_yielder_fn,
             host_env_drop_fn,
         )
     };
