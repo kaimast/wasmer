@@ -20,7 +20,7 @@
 //! Ready?
 
 use std::sync::{Arc, Mutex};
-use wasmer::{imports, wat2wasm, Function, Instance, Module, Store, WasmerEnv};
+use wasmer::{imports, wat2wasm, Memory, LazyInit, Function, Instance, Module, Store, WasmerEnv};
 use wasmer_compiler_cranelift::Cranelift;
 use wasmer_engine_jit::JIT;
 
@@ -31,6 +31,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 (module
   (func $get_counter (import "env" "get_counter") (result i32))
   (func $add_to_counter (import "env" "add_to_counter") (param i32) (result i32))
+
+  (memory (export "memory") 1)
 
   (type $increment_t (func (param i32) (result i32)))
   (func $increment_f (type $increment_t) (param $x i32) (result i32)
@@ -55,71 +57,74 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Let's compile the Wasm module.
     let module = Module::new(&store, wasm_bytes)?;
 
-    // We create some shared data here, `Arc` is required because we may
-    // move our WebAssembly instance to another thread to run it. Mutex
-    // lets us get shared mutabilty which is fine because we know we won't
-    // run host calls concurrently.  If concurrency is a possibilty, we'd have
-    // to use a `Mutex`.
-    let shared_counter: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
+    for _ in 0..10000 {
+        // We create some shared data here, `Arc` is required because we may
+        // move our WebAssembly instance to another thread to run it. Mutex
+        // lets us get shared mutabilty which is fine because we know we won't
+        // run host calls concurrently.  If concurrency is a possibilty, we'd have
+        // to use a `Mutex`.
+        let shared_counter: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
 
-    // Once we have our counter we'll wrap it inside en `Env` which we'll pass
-    // to our imported functions.
-    //
-    // This struct may have been anything. The only constraint is it must be
-    // possible to know the size of the `Env` at compile time (i.e it has to
-    // implement the `Sized` trait) and that it implement the `WasmerEnv` trait.
-    // We derive a default implementation of `WasmerEnv` here.
-    #[derive(WasmerEnv, Clone)]
-    struct Env {
-        counter: Arc<Mutex<i32>>,
-    }
-
-    // Create the functions
-    fn get_counter(env: &Env) -> i32 {
-        *env.counter.lock().unwrap()
-    }
-    fn add_to_counter(env: &Env, add: i32) -> i32 {
-        let mut counter_ref = env.counter.lock().unwrap();
-
-        *counter_ref += add;
-        *counter_ref
-    }
-
-    // Create an import object.
-    let import_object = imports! {
-        "env" => {
-            "get_counter" => Function::new_native_with_env(&store, Env { counter: shared_counter.clone() }, get_counter),
-            "add_to_counter" => Function::new_native_with_env(&store, Env { counter: shared_counter.clone() }, add_to_counter),
+        // Once we have our counter we'll wrap it inside en `Env` which we'll pass
+        // to our imported functions.
+        //
+        // This struct may have been anything. The only constraint is it must be
+        // possible to know the size of the `Env` at compile time (i.e it has to
+        // implement the `Sized` trait) and that it implements the `WasmerEnv` trait.
+        // We derive a default implementation of `WasmerEnv` here.
+        #[derive(Clone, WasmerEnv)]
+        struct Env {
+            #[wasmer(export)]
+            memory: LazyInit<Memory>,
+            counter: Arc<Mutex<i32>>,
         }
-    };
 
-    println!("Instantiating module...");
-    // Let's instantiate the Wasm module.
-    let instance = Instance::new(&module, &import_object)?;
+        // Create the functions
+        fn get_counter(env: &Env) -> i32 {
+            *env.counter.lock().unwrap()
+        }
+        fn add_to_counter(env: &Env, add: i32) -> i32 {
+            let mut counter_ref = env.counter.lock().unwrap();
 
-    // Here we go.
-    //
-    // The Wasm module exports a function called `increment_counter_loop`. Let's get it.
-    let increment_counter_loop = instance
-        .exports
-        .get_function("increment_counter_loop")?
-        .native::<i32, i32>()?;
+            *counter_ref += add;
+            *counter_ref
+        }
 
-    let counter_value: i32 = *shared_counter.lock().unwrap();
-    println!("Initial ounter value: {:?}", counter_value);
+        // Create an import object.
+        let import_object = imports! {
+            "env" => {
+                "get_counter" => Function::new_native_with_env(&store, Env { counter: shared_counter.clone(), memory: Default::default() }, get_counter),
+                "add_to_counter" => Function::new_native_with_env(&store, Env { counter: shared_counter.clone(), memory: Default::default() }, add_to_counter),
+            }
+        };
 
-    println!("Calling `increment_counter_loop` function...");
-    // Let's call the `increment_counter_loop` exported function.
-    //
-    // It will loop five times thus incrementing our counter five times.
-    let result = increment_counter_loop.call(5)?;
+        println!("Instantiating module...");
+        // Let's instantiate the Wasm module.
+        let instance = Instance::new(&module, &import_object)?;
 
-    let counter_value: i32 = *shared_counter.lock().unwrap();
-    println!("New counter value (host): {:?}", counter_value);
-    assert_eq!(counter_value, 5);
+        // Here we go.
+        //
+        // The Wasm module exports a function called `increment_counter_loop`. Let's get it.
+        let increment_counter_loop = instance
+            .exports
+            .get_function("increment_counter_loop")?
+            .native::<i32, i32>()?;
+        let counter_value: i32 = *shared_counter.lock().unwrap();
+        println!("Initial counter value: {:?}", counter_value);
 
-    println!("New counter value (guest): {:?}", counter_value);
-    assert_eq!(result, 5);
+        println!("Calling `increment_counter_loop` function...");
+        // Let's call the `increment_counter_loop` exported function.
+        //
+        // It will loop five times thus incrementing our counter five times.
+        let result = increment_counter_loop.call(5)?;
+
+        let counter_value: i32 = *shared_counter.lock().unwrap();
+        println!("New counter value (host): {:?}", counter_value);
+        assert_eq!(counter_value, 5);
+
+        println!("New counter value (guest): {:?}", result);
+        assert_eq!(result, 5);
+    }
 
     Ok(())
 }

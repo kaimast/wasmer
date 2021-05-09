@@ -62,7 +62,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Now that we have the exported memory, let's get some
     // information about it.
     //
-    // The first thing we might be intersted in is the size of the memory.
+    // The first thing we might be interested in is the size of the memory.
     // Let's get it!
     println!("Memory size (pages) {:?}", memory.size());
     println!("Memory size (bytes) {:?}", memory.data_size());
