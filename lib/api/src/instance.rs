@@ -188,28 +188,27 @@ impl Instance {
             use std::cell::Cell;
             use wasmer_vm::{restore_tls, take_tls};
 
-            let ptr: u64 = {
-                let ptr = take_tls().into_inner();
-                unsafe { std::mem::transmute(ptr) }
-            };
+            // FIXME pointer might not always be 64bit
+            let tls_store: Mutex<(bool, Option<u64>)> = Mutex::new((false, None));
 
-            let tls_store = Mutex::new((false, ptr));
-
+            // This mirrors code from lunatic
+            // See https://github.com/lunatic-solutions/lunatic/blob/5ba519e2421d6531266955201f86e641d8c777ec/src/api/process/tls.rs#L14
             task.set_pre_post_poll(move || {
                 let mut tls_store = tls_store.lock().unwrap();
+                let (init, ptr_store) = &mut *tls_store;
 
-                if tls_store.0 {
-                    let ptr = take_tls().into_inner();
-                    tls_store.1 = unsafe { std::mem::transmute(ptr) };
-                    tls_store.0 = false;
+                // On the first poll there is nothing to preserve yet
+                if *init {
+                    if let Some(ptr) = ptr_store.take() {
+                        let ptr = unsafe { std::mem::transmute(ptr) };
+                        restore_tls(Cell::new(ptr));
+
+                    } else {
+                        let ptr = take_tls().into_inner();
+                        *ptr_store = Some(unsafe { std::mem::transmute(ptr) });
+                    }
                 } else {
-                    let mut value = 0;
-                    std::mem::swap(&mut value, &mut tls_store.1);
-
-                    let value = unsafe { std::mem::transmute(value) };
-                    restore_tls(Cell::new(value));
-
-                    tls_store.0 = true;
+                    *init = true;
                 }
             });
         }
