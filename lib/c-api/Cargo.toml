@@ -21,8 +21,8 @@ wasmer-compiler-singlepass = { version = "1.0.2", path = "../compiler-singlepass
 wasmer-compiler-llvm = { version = "1.0.2", path = "../compiler-llvm", optional = true }
 wasmer-emscripten = { version = "1.0.2", path = "../emscripten", optional = true }
 wasmer-engine = { version = "1.0.2", path = "../engine" }
-wasmer-engine-jit = { version = "1.0.2", path = "../engine-jit", optional = true }
-wasmer-engine-native = { version = "1.0.2", path = "../engine-native", optional = true }
+wasmer-engine-universal = { version = "1.0.2", path = "../engine-universal", optional = true }
+wasmer-engine-dylib = { version = "1.0.2", path = "../engine-dylib", optional = true }
 wasmer-engine-object-file = { version = "1.0.2", path = "../engine-object-file", optional = true }
 wasmer-middlewares = { version = "1.0.2", path = "../middlewares", optional = true }
 wasmer-wasi = { version = "1.0.2", path = "../wasi", optional = true }
@@ -46,7 +46,7 @@ default = [
     "deprecated",
     "wat",
     "cranelift",
-    "jit",
+    "universal",
     "wasi",
     "middlewares",
 ]
@@ -55,12 +55,12 @@ wasi = ["wasmer-wasi", "typetag", "serde"]
 engine = []
 middlewares = ["wasmer-middlewares"]
 deprecated = ["libffi", "wasmer/experimental-reference-types-extern-ref"]
-jit = [
-    "wasmer-engine-jit",
+universal = [
+    "wasmer-engine-universal",
     "engine",
 ]
-native = [
-    "wasmer-engine-native",
+dylib = [
+    "wasmer-engine-dylib",
     "engine",
 ]
 object-file = [
@@ -69,8 +69,8 @@ object-file = [
 ]
 compiler = [
     "wasmer/compiler",
-    "wasmer-engine-jit/compiler",
-    "wasmer-engine-native/compiler",
+    "wasmer-engine-universal/compiler",
+    "wasmer-engine-dylib/compiler",
     "wasmer-engine-object-file/compiler"
 ]
 singlepass = [

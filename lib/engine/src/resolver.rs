@@ -113,7 +113,7 @@ fn get_extern_from_export(_module: &ModuleInfo, export: &Export) -> ExternType {
     match export {
         Export::Function(ref f) => ExternType::Function(f.vm_function.signature.clone()),
         Export::Table(ref t) => ExternType::Table(*t.ty()),
-        Export::Memory(ref m) => ExternType::Memory(*m.ty()),
+        Export::Memory(ref m) => ExternType::Memory(m.ty()),
         Export::Global(ref g) => {
             let global = g.from.ty();
             ExternType::Global(*global)
@@ -173,17 +173,7 @@ pub fn resolve_imports(
                         // TODO: We should check that the f.vmctx actually matches
                         // the shape of `VMDynamicFunctionImportContext`
                     }
-                    VMFunctionKind::Static => {
-                        // The native ABI for functions fails when defining a function natively in
-                        // macos (Darwin) with the Apple Silicon ARM chip, for functions with more than 10 args
-                        // TODO: Cranelift should have a good ABI for the ABI
-                        if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
-                            let num_params = f.vm_function.signature.params().len();
-                            assert!(num_params < 9, "Only native functions with less than 9 arguments are allowed in Apple Silicon (for now). Received {} in the import {}.{}", num_params, module_name, field);
-                        }
-
-                        f.vm_function.address
-                    }
+                    VMFunctionKind::Static => f.vm_function.address,
                 };
 
                 // Clone the host env for this `Instance`.
@@ -249,12 +239,27 @@ pub fn resolve_imports(
 
                 host_function_env_initializers.push(import_function_env);
             }
-            Export::Table(ref t) => {
-                table_imports.push(VMTableImport {
-                    definition: t.from.vmtable(),
-                    from: t.from.clone(),
-                });
-            }
+            Export::Table(ref t) => match import_index {
+                ImportIndex::Table(index) => {
+                    let import_table_ty = t.from.ty();
+                    let expected_table_ty = &module.tables[*index];
+                    if import_table_ty.ty != expected_table_ty.ty {
+                        return Err(LinkError::Import(
+                            module_name.to_string(),
+                            field.to_string(),
+                            ImportError::IncompatibleType(import_extern, export_extern),
+                        ));
+                    }
+
+                    table_imports.push(VMTableImport {
+                        definition: t.from.vmtable(),
+                        from: t.from.clone(),
+                    });
+                }
+                _ => {
+                    unreachable!("Table resolution did not match");
+                }
+            },
             Export::Memory(ref m) => {
                 match import_index {
                     ImportIndex::Memory(index) => {

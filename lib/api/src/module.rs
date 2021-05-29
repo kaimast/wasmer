@@ -55,7 +55,7 @@ impl Module {
     ///
     /// Creating a WebAssembly module from bytecode can result in a
     /// [`CompileError`] since this operation requires to transorm the Wasm
-    /// bytecode into code the machine can easily execute (normally through a JIT).
+    /// bytecode into code the machine can easily execute.
     ///
     /// ## Example
     ///
@@ -275,7 +275,8 @@ impl Module {
             // of this steps traps, we still need to keep the instance alive
             // as some of the Instance elements may have placed in other
             // instance tables.
-            self.artifact.finish_instantiation(&instance_handle)?;
+            self.artifact
+                .finish_instantiation(&self.store, &instance_handle)?;
 
             Ok(instance_handle)
         }

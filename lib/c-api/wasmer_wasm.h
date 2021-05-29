@@ -62,8 +62,8 @@
 #  define DEPRECATED(message) __declspec(deprecated(message))
 #endif
 
-// The `jit` feature has been enabled for this build.
-#define WASMER_JIT_ENABLED
+// The `universal` feature has been enabled for this build.
+#define WASMER_UNIVERSAL_ENABLED
 
 // The `compiler` feature has been enabled for this build.
 #define WASMER_COMPILER_ENABLED
@@ -124,8 +124,8 @@ typedef enum wasmer_compiler_t {
 #endif
 
 typedef enum wasmer_engine_t {
-  JIT = 0,
-  NATIVE = 1,
+  UNIVERSAL = 0,
+  DYLIB = 1,
   OBJECT_FILE = 2,
 } wasmer_engine_t;
 

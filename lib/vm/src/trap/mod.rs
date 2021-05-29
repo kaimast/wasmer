@@ -8,7 +8,7 @@ mod traphandlers;
 
 pub use trapcode::TrapCode;
 pub use traphandlers::{
-    catch_traps, catch_traps_with_result, raise_lib_trap, raise_user_trap, restore_tls, take_tls,
-    wasmer_call_trampoline, CallThreadState, Trap,
+    catch_traps, catch_traps_with_result, raise_lib_trap, raise_user_trap, wasmer_call_trampoline,
+    CallThreadState, TlsRestore, Trap, TrapHandler, TrapHandlerFn,
 };
 pub use traphandlers::{init_traps, resume_panic};

@@ -43,17 +43,19 @@ impl Compile {
         target_triple: &Triple,
     ) -> Result<&'static str> {
         Ok(match engine_type {
-            #[cfg(feature = "native")]
-            EngineType::Native => {
-                wasmer_engine_native::NativeArtifact::get_default_extension(target_triple)
+            #[cfg(feature = "dylib")]
+            EngineType::Dylib => {
+                wasmer_engine_dylib::DylibArtifact::get_default_extension(target_triple)
             }
-            #[cfg(feature = "jit")]
-            EngineType::JIT => wasmer_engine_jit::JITArtifact::get_default_extension(target_triple),
+            #[cfg(feature = "universal")]
+            EngineType::Universal => {
+                wasmer_engine_universal::UniversalArtifact::get_default_extension(target_triple)
+            }
             #[cfg(feature = "object-file")]
             EngineType::ObjectFile => {
                 wasmer_engine_object_file::ObjectFileArtifact::get_default_extension(target_triple)
             }
-            #[cfg(not(all(feature = "native", feature = "jit", feature = "object-file")))]
+            #[cfg(not(all(feature = "dylib", feature = "universal", feature = "object-file")))]
             _ => bail!("selected engine type is not compiled in"),
         })
     }
