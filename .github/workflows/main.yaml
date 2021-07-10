@@ -106,7 +106,7 @@ jobs:
       - name: Set up base deps on musl
         if: matrix.build == 'linux-musl-x64'
         run: |
-            apk add musl-dev curl make libtool libffi-dev gcc automake autoconf git openssl-dev
+            apk add build-base musl-dev curl make libtool libffi-dev gcc automake autoconf git openssl-dev g++
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -209,11 +209,6 @@ jobs:
       - name: Build C API
         run: |
           make build-capi
-        if: matrix.target != 'aarch64-apple-darwin'
-      - name: Build C API (system libffi)
-        run: |
-          make build-capi-cranelift-system-libffi
-        if: matrix.target == 'aarch64-apple-darwin'
       - name: Build Wasmer binary
         run: |
           make build-wasmer
@@ -224,13 +219,13 @@ jobs:
       - name: Install Nightly Rust for Headless
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: 'nightly-2020-12-22'
+          toolchain: 'nightly-2021-04-25'
           target: ${{ matrix.target }}
           override: true
           components: "rust-src"
         if: needs.setup.outputs.DOING_RELEASE == '1'
       - name: Build Minimal Wasmer Headless
-        if: needs.setup.outputs.DOING_RELEASE == '1'
+        if: needs.setup.outputs.DOING_RELEASE == '1' && matrix.build != 'linux-musl-x64'
         run: |
           cargo install xargo
           echo "" >> Cargo.toml
@@ -266,8 +261,8 @@ jobs:
         run: |
           ls target/release
           alias wasmer=target/release/wasmer
-          ./target/release/wasmer compile --target=x86_64-apple-darwin lib/c-api/tests/assets/qjs.wasm -o qjs_mac_from_linux.wjit
-          #./target/release/wasmer compile --target=x86_64-pc-windows-msvc lib/c-api/tests/assets/qjs.wasm -o qjs_win_from_linux.wjit
+          ./target/release/wasmer compile --target=x86_64-apple-darwin lib/c-api/examples/assets/qjs.wasm -o qjs_mac_from_linux.wjit
+          #./target/release/wasmer compile --target=x86_64-pc-windows-msvc lib/c-api/examples/assets/qjs.wasm -o qjs_win_from_linux.wjit
           mkdir cross
           cp qjs_mac_from_linux.wjit cross
           #cp qjs_win_from_linux.wjit cross
@@ -278,8 +273,8 @@ jobs:
         run: |
           ls target/release
           alias wasmer=target/release/wasmer
-          ./target/release/wasmer compile --target=x86_64-unknown-linux-gnu lib/c-api/tests/assets/qjs.wasm -o qjs_linux_from_mac.wjit
-          #./target/release/wasmer compile --target=x86_64-pc-windows-msvc lib/c-api/tests/assets/qjs.wasm -o qjs_win_from_mac.wjit
+          ./target/release/wasmer compile --target=x86_64-unknown-linux-gnu lib/c-api/examples/assets/qjs.wasm -o qjs_linux_from_mac.wjit
+          #./target/release/wasmer compile --target=x86_64-pc-windows-msvc lib/c-api/examples/assets/qjs.wasm -o qjs_win_from_mac.wjit
           mkdir cross
           cp qjs_linux_from_mac.wjit cross
           #cp qjs_win_from_mac.wjit cross

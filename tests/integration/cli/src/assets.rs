@@ -3,12 +3,16 @@ use std::path::PathBuf;
 
 pub const C_ASSET_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../../lib/c-api/tests/assets"
+    "/../../../lib/c-api/examples/assets"
 );
 pub const ASSET_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../tests/examples");
 
 pub const WASMER_INCLUDE_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../lib/c-api");
 
+#[cfg(feature = "debug")]
+pub const WASMER_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../target/debug/wasmer");
+
+#[cfg(not(feature = "debug"))]
 pub const WASMER_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../../target/release/wasmer"
@@ -17,12 +21,12 @@ pub const WASMER_PATH: &str = concat!(
 #[cfg(not(windows))]
 pub const LIBWASMER_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../../target/release/libwasmer_c_api.a"
+    "/../../../target/release/libwasmer.a"
 );
 #[cfg(windows)]
 pub const LIBWASMER_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../../target/release/wasmer_c_api.lib"
+    "/../../../target/release/wasmer.lib"
 );
 
 /// Get the path to the `libwasmer.a` static library.

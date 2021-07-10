@@ -8,7 +8,7 @@ pub use global::*;
 pub use memory::*;
 use std::mem;
 pub use table::*;
-use wasmer::{Extern, ExternType};
+use wasmer_api::{Extern, ExternType};
 
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
@@ -256,7 +256,7 @@ mod tests {
     #[test]
     fn test_extern_copy() {
         (assert_c! {
-            #include "tests/wasmer_wasm.h"
+            #include "tests/wasmer.h"
 
             int main() {
                 wasm_engine_t* engine = wasm_engine_new();

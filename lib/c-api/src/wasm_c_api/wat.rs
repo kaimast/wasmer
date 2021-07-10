@@ -19,7 +19,7 @@ pub unsafe extern "C" fn wat2wasm(wat: &wasm_byte_vec_t, out: &mut wasm_byte_vec
             return;
         }
     };
-    let result: wasm_byte_vec_t = match wasmer::wat2wasm(wat) {
+    let result: wasm_byte_vec_t = match wasmer_api::wat2wasm(wat) {
         Ok(val) => val.into_owned().into(),
         Err(err) => {
             crate::error::update_last_error(err);
@@ -39,7 +39,7 @@ mod tests {
     #[test]
     fn test_wat2wasm() {
         (assert_c! {
-            #include "tests/wasmer_wasm.h"
+            #include "tests/wasmer.h"
 
             int main() {
                 wasm_byte_vec_t wat;
@@ -72,7 +72,7 @@ mod tests {
     #[test]
     fn test_wat2wasm_failed() {
         (assert_c! {
-            #include "tests/wasmer_wasm.h"
+            #include "tests/wasmer.h"
 
             int main() {
                 wasm_byte_vec_t wat;

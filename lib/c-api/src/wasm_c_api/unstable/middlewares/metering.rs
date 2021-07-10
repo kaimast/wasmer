@@ -11,7 +11,7 @@
 //! # use inline_c::assert_c;
 //! # fn main() {
 //! #    (assert_c! {
-//! # #include "tests/wasmer_wasm.h"
+//! # #include "tests/wasmer.h"
 //! #
 //! // Define our “cost function”.
 //! uint64_t cost_function(wasmer_parser_operator_t wasm_operator) {
@@ -135,7 +135,7 @@ use super::super::super::instance::wasm_instance_t;
 use super::super::parser::operator::wasmer_parser_operator_t;
 use super::wasmer_middleware_t;
 use std::sync::Arc;
-use wasmer::wasmparser::Operator;
+use wasmer_api::wasmparser::Operator;
 use wasmer_middlewares::{
     metering::{get_remaining_points, set_remaining_points, MeteringPoints},
     Metering,
@@ -233,7 +233,7 @@ pub extern "C" fn wasmer_metering_points_are_exhausted(instance: &wasm_instance_
 /// # use inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
-/// # #include "tests/wasmer_wasm.h"
+/// # #include "tests/wasmer.h"
 /// #
 /// // Define a dummy “cost function”.
 /// uint64_t cost_function(wasmer_parser_operator_t wasm_operator) {

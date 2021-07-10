@@ -253,6 +253,7 @@
 //! [wasmer-llvm]: https://docs.rs/wasmer-compiler-llvm/*/wasmer_compiler_llvm/
 //! [wasmer-wasi]: https://docs.rs/wasmer-wasi/*/wasmer_wasi/
 
+mod cell;
 mod env;
 mod exports;
 mod externals;
@@ -278,11 +279,10 @@ pub mod internals {
     //! `wasmer-vm`. Please don't use any of this types directly, as
     //! they might change frequently or be removed in the future.
 
-    #[cfg(feature = "deprecated")]
-    pub use crate::externals::{UnsafeMutableEnv, WithUnsafeMutableEnv};
     pub use crate::externals::{WithEnv, WithoutEnv};
 }
 
+pub use crate::cell::WasmCell;
 pub use crate::env::{HostEnvInitError, LazyInit, WasmerEnv};
 pub use crate::exports::{ExportError, Exportable, Exports, ExportsIterator};
 #[cfg(feature = "async")]
@@ -374,3 +374,13 @@ pub use wasmer_engine_dylib::{Dylib, DylibArtifact, DylibEngine};
 
 /// Version number of this crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// The Deprecated JIT Engine (please use `Universal` instead)
+#[cfg(feature = "jit")]
+#[deprecated(since = "2.0.0", note = "Please use the `universal` feature instead")]
+pub type JIT = Universal;
+
+/// The Deprecated Native Engine (please use `Dylib` instead)
+#[cfg(feature = "native")]
+#[deprecated(since = "2.0.0", note = "Please use the `native` feature instead")]
+pub type Native = Dylib;

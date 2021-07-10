@@ -1,7 +1,7 @@
 use super::types::{wasm_ref_t, wasm_valkind_enum};
 use crate::error::{update_last_error, CApiError};
 use std::convert::{TryFrom, TryInto};
-use wasmer::Val;
+use wasmer_api::Val;
 
 /// Represents the kind of values. The variants of this C enum is
 /// defined in `wasm.h` to list the following:
@@ -46,7 +46,7 @@ pub union wasm_val_inner {
 /// # use inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
-/// # #include "tests/wasmer_wasm.h"
+/// # #include "tests/wasmer.h"
 /// #
 /// int main() {
 ///     // Create a 32-bit integer Wasm value.

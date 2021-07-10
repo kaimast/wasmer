@@ -5,7 +5,7 @@ use super::trap::wasm_trap_t;
 use crate::ordered_resolver::OrderedResolver;
 use std::mem;
 use std::sync::Arc;
-use wasmer::{Extern, Instance, InstantiationError};
+use wasmer_api::{Extern, Instance, InstantiationError};
 
 /// Opaque type representing a WebAssembly instance.
 #[allow(non_camel_case_types)]
@@ -87,7 +87,7 @@ pub unsafe extern "C" fn wasm_instance_new(
 ///
 /// # Example
 ///
-/// See `wasm_instance_new`.
+/// See [`wasm_instance_new`].
 #[no_mangle]
 pub unsafe extern "C" fn wasm_instance_delete(_instance: Option<Box<wasm_instance_t>>) {}
 
@@ -99,7 +99,7 @@ pub unsafe extern "C" fn wasm_instance_delete(_instance: Option<Box<wasm_instanc
 /// # use inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
-/// # #include "tests/wasmer_wasm.h"
+/// # #include "tests/wasmer.h"
 /// #
 /// int main() {
 ///     // Create the engine and the store.
@@ -184,15 +184,7 @@ pub unsafe extern "C" fn wasm_instance_exports(
     let mut extern_vec = instance
         .exports
         .iter()
-        .map(|(name, r#extern)| {
-            let function = if let Extern::Function { .. } = r#extern {
-                instance.exports.get_function(&name).ok().cloned()
-            } else {
-                None
-            };
-
-            Box::into_raw(Box::new(r#extern.clone().into()))
-        })
+        .map(|(_name, r#extern)| Box::into_raw(Box::new(r#extern.clone().into())))
         .collect::<Vec<*mut wasm_extern_t>>();
     extern_vec.shrink_to_fit();
 
@@ -209,7 +201,7 @@ mod tests {
     #[test]
     fn test_instance_new() {
         (assert_c! {
-            #include "tests/wasmer_wasm.h"
+            #include "tests/wasmer.h"
 
             // The `sum` host function implementation.
             wasm_trap_t* sum_callback(

@@ -6,7 +6,7 @@ mod capture_files;
 
 pub use super::unstable::wasi::wasi_get_unordered_imports;
 use super::{
-    externals::{wasm_extern_vec_t, wasm_func_t, wasm_memory_t},
+    externals::{wasm_extern_vec_t, wasm_func_t},
     instance::wasm_instance_t,
     module::wasm_module_t,
     store::wasm_store_t,
@@ -17,7 +17,7 @@ use std::convert::TryFrom;
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::slice;
-use wasmer::{Extern, NamedResolver};
+use wasmer_api::{Extern, NamedResolver};
 use wasmer_wasi::{
     generate_import_object_from_env, get_wasi_version, WasiEnv, WasiFile, WasiState,
     WasiStateBuilder, WasiVersion,
@@ -198,25 +198,6 @@ pub extern "C" fn wasi_env_new(mut config: Box<wasi_config_t>) -> Option<Box<was
 /// Delete a [`wasi_env_t`].
 #[no_mangle]
 pub extern "C" fn wasi_env_delete(_state: Option<Box<wasi_env_t>>) {}
-
-/// This function is deprecated. You may safely remove all calls to it and everything
-/// will continue to work.
-///
-/// cbindgen:prefix=DEPRECATED("This function is no longer necessary. You may safely remove all calls to it and everything will continue to work.")
-#[no_mangle]
-pub extern "C" fn wasi_env_set_instance(
-    _env: &mut wasi_env_t,
-    _instance: &wasm_instance_t,
-) -> bool {
-    true
-}
-
-/// This function is deprecated. You may safely remove all calls to it and everything
-/// will continue to work.
-///
-/// cbindgen:prefix=DEPRECATED("This function is no longer necessary. You may safely remove all calls to it and everything will continue to work.")
-#[no_mangle]
-pub extern "C" fn wasi_env_set_memory(_env: &mut wasi_env_t, _memory: &wasm_memory_t) {}
 
 #[no_mangle]
 pub unsafe extern "C" fn wasi_env_read_stdout(
@@ -414,7 +395,7 @@ mod tests {
     #[test]
     fn test_wasi_get_wasi_version_snapshot0() {
         (assert_c! {
-            #include "tests/wasmer_wasm.h"
+            #include "tests/wasmer.h"
 
             int main() {
                 wasm_engine_t* engine = wasm_engine_new();
@@ -445,7 +426,7 @@ mod tests {
     #[test]
     fn test_wasi_get_wasi_version_snapshot1() {
         (assert_c! {
-            #include "tests/wasmer_wasm.h"
+            #include "tests/wasmer.h"
 
             int main() {
                 wasm_engine_t* engine = wasm_engine_new();
@@ -476,7 +457,7 @@ mod tests {
     #[test]
     fn test_wasi_get_wasi_version_invalid() {
         (assert_c! {
-            #include "tests/wasmer_wasm.h"
+            #include "tests/wasmer.h"
 
             int main() {
                 wasm_engine_t* engine = wasm_engine_new();

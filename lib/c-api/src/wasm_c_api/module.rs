@@ -6,7 +6,7 @@ use super::types::{
 use crate::error::{update_last_error, CApiError};
 use std::ptr::NonNull;
 use std::sync::Arc;
-use wasmer::Module;
+use wasmer_api::Module;
 
 /// Opaque type representing a WebAssembly module.
 #[allow(non_camel_case_types)]
@@ -65,7 +65,7 @@ pub unsafe extern "C" fn wasm_module_delete(_module: Option<Box<wasm_module_t>>)
 /// # use inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
-/// # #include "tests/wasmer_wasm.h"
+/// # #include "tests/wasmer.h"
 /// #
 /// int main() {
 ///     // Create the engine and the store.
@@ -132,7 +132,7 @@ pub unsafe extern "C" fn wasm_module_validate(
 /// # use inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
-/// # #include "tests/wasmer_wasm.h"
+/// # #include "tests/wasmer.h"
 /// #
 /// int main() {
 ///     // Create the engine and the store.
@@ -256,7 +256,7 @@ pub unsafe extern "C" fn wasm_module_exports(
 /// # use inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
-/// # #include "tests/wasmer_wasm.h"
+/// # #include "tests/wasmer.h"
 /// #
 /// int main() {
 ///     // Create the engine and the store.
@@ -408,7 +408,7 @@ pub unsafe extern "C" fn wasm_module_imports(
 /// # use inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
-/// # #include "tests/wasmer_wasm.h"
+/// # #include "tests/wasmer.h"
 /// #
 /// int main() {
 ///     // Create the engine and the store.
@@ -524,7 +524,7 @@ mod tests {
     #[test]
     fn test_module_validate() {
         (assert_c! {
-            #include "tests/wasmer_wasm.h"
+            #include "tests/wasmer.h"
 
             int main() {
                 wasm_engine_t* engine = wasm_engine_new();
@@ -551,7 +551,7 @@ mod tests {
     #[test]
     fn test_module_new() {
         (assert_c! {
-            #include "tests/wasmer_wasm.h"
+            #include "tests/wasmer.h"
 
             int main() {
                 wasm_engine_t* engine = wasm_engine_new();
@@ -580,7 +580,7 @@ mod tests {
     #[test]
     fn test_module_exports() {
         (assert_c! {
-            #include "tests/wasmer_wasm.h"
+            #include "tests/wasmer.h"
 
             int main() {
                 wasm_engine_t* engine = wasm_engine_new();
@@ -688,7 +688,7 @@ mod tests {
     #[test]
     fn test_module_imports() {
         (assert_c! {
-            #include "tests/wasmer_wasm.h"
+            #include "tests/wasmer.h"
 
             int main() {
                 wasm_engine_t* engine = wasm_engine_new();
@@ -806,7 +806,7 @@ mod tests {
     #[test]
     fn test_module_serialize() {
         (assert_c! {
-            #include "tests/wasmer_wasm.h"
+            #include "tests/wasmer.h"
 
             int main() {
                 wasm_engine_t* engine = wasm_engine_new();
@@ -840,7 +840,7 @@ mod tests {
     #[test]
     fn test_module_serialize_and_deserialize() {
         (assert_c! {
-            #include "tests/wasmer_wasm.h"
+            #include "tests/wasmer.h"
 
             int main() {
                 wasm_engine_t* engine = wasm_engine_new();

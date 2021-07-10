@@ -14,7 +14,7 @@ SHELL=/bin/bash
 # |------------|-----------|----------|--------------|-------|
 # | Cranelift  | Universal | Linux    | amd64        | glibc |
 # | LLVM       | Dylib     | Darwin   | aarch64      | musl  |
-# | Singlepass |           | Windows  |              |       |
+# | Singlepass | Staticlib | Windows  |              |       |
 # |------------|-----------|----------|--------------|-------|
 #
 # Here is what works and what doesn't:
@@ -254,39 +254,9 @@ compilers_engines := $(strip $(compilers_engines))
 
 #####
 #
-# Miscellaneous.
-#
-#####
-
-# The `libffi` library doesn't support Darwin/aarch64. In this
-# particular case, we need to use the `libffi` version provided by the
-# system itself.
-#
-# See <https://github.com/libffi/libffi/pull/621>.
-use_system_ffi := 0
-
-ifeq ($(IS_DARWIN), 1)
-	ifeq ($(IS_AARCH64), 1)
-		use_system_ffi = 1
-	endif
-endif
-
-# If the user has set the `WASMER_CAPI_USE_SYSTEM_LIBFFI` environment
-# variable to 1, then also use the system `libffi`.
-ifeq ($(WASMER_CAPI_USE_SYSTEM_LIBFFI), 1)
-	use_system_ffi = 1
-endif
-
-#####
-#
 # Cargo features.
 #
 #####
-
-# Define the default Cargo features for the `wasmer-c-api` crate.
-ifeq ($(use_system_ffi), 1)
-	capi_default_features := --features system-libffi
-endif
 
 # Small trick to define a space and a comma.
 space := $() $()
@@ -351,7 +321,6 @@ $(info   * API: $(bold)$(green)${compilers_engines}$(reset))
 $(info   * C-API: $(bold)$(green)${capi_compilers_engines}$(reset))
 $(info Cargo features:)
 $(info   * Compilers: `$(bold)$(green)${compiler_features}$(reset)`.)
-$(info   * C-API: `$(bold)$(green)${capi_default_features}$(reset)`.)
 $(info )
 $(info )
 $(info --------------)
@@ -364,17 +333,18 @@ $(info )
 # Building #
 ############
 
-# Not really "all", just the default target that builds enough so make install will go through
+# Not really "all", just the default target that builds enough so make
+# install will go through.
 all: build-wasmer build-capi
-
-bench:
-	cargo bench $(compiler_features)
 
 build-wasmer:
 	cargo build --release --manifest-path lib/cli/Cargo.toml $(compiler_features) --bin wasmer
 
 build-wasmer-debug:
 	cargo build --manifest-path lib/cli/Cargo.toml $(compiler_features) --bin wasmer
+
+bench:
+	cargo bench $(compiler_features)
 
 # For best results ensure the release profile looks like the following
 # in Cargo.toml:
@@ -414,7 +384,7 @@ else
 endif
 
 build-docs:
-	cargo doc --release $(compiler_features) --document-private-items --no-deps --workspace
+	cargo doc --release $(compiler_features) --document-private-items --no-deps --workspace --exclude wasmer-c-api
 
 capi-setup:
 ifeq ($(IS_WINDOWS), 1)
@@ -422,64 +392,64 @@ ifeq ($(IS_WINDOWS), 1)
 endif
 
 build-docs-capi: capi-setup
-	cd lib/c-api/doc/deprecated/ && doxygen doxyfile
-	RUSTFLAGS="${RUSTFLAGS}" cargo doc --manifest-path lib/c-api/Cargo.toml --no-deps --features wat,universal,object-file,dylib,cranelift,wasi $(capi_default_features)
+	# `wasmer-c-api` lib's name is `wasmer`. To avoid a conflict
+	# when generating the documentation, we rename it to its
+	# crate's name. Then we restore the lib's name.
+	sed -i '' -e 's/name = "wasmer" # ##lib.name##/name = "wasmer_c_api" # ##lib.name##/' lib/c-api/Cargo.toml
+	RUSTFLAGS="${RUSTFLAGS}" cargo doc --manifest-path lib/c-api/Cargo.toml --no-deps --features wat,universal,staticlib,dylib,cranelift,wasi
+	sed -i '' -e 's/name = "wasmer_c_api" # ##lib.name##/name = "wasmer" # ##lib.name##/' lib/c-api/Cargo.toml
 
 build-capi: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,universal,dylib,object-file,wasi,middlewares $(capi_default_features) $(capi_compiler_features)
+		--no-default-features --features wat,universal,dylib,staticlib,wasi,middlewares $(capi_compiler_features)
 
 build-capi-singlepass: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,universal,dylib,object-file,singlepass,wasi,middlewares $(capi_default_features)
+		--no-default-features --features wat,universal,dylib,staticlib,singlepass,wasi,middlewares
 
 build-capi-singlepass-universal: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,universal,singlepass,wasi,middlewares $(capi_default_features)
+		--no-default-features --features wat,universal,singlepass,wasi,middlewares
 
 build-capi-singlepass-dylib: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,dylib,singlepass,wasi,middlewares $(capi_default_features)
+		--no-default-features --features wat,dylib,singlepass,wasi,middlewares
 
-build-capi-singlepass-object-file: capi-setup
+build-capi-singlepass-staticlib: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,object-file,singlepass,wasi,middlewares $(capi_default_features)
+		--no-default-features --features wat,staticlib,singlepass,wasi,middlewares
 
 build-capi-cranelift: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,universal,dylib,object-file,cranelift,wasi,middlewares $(capi_default_features)
-
-build-capi-cranelift-system-libffi: capi-setup
-	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,universal,dylib,object-file,cranelift,wasi,middlewares,system-libffi $(capi_default_features)
+		--no-default-features --features wat,universal,dylib,staticlib,cranelift,wasi,middlewares
 
 build-capi-cranelift-universal: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,universal,cranelift,wasi,middlewares $(capi_default_features)
+		--no-default-features --features wat,universal,cranelift,wasi,middlewares
 
 build-capi-cranelift-dylib: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,dylib,cranelift,wasi,middlewares $(capi_default_features)
+		--no-default-features --features wat,dylib,cranelift,wasi,middlewares
 
-build-capi-cranelift-object-file: capi-setup
+build-capi-cranelift-staticlib: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,dylib,object-file,cranelift,wasi,middlewares $(capi_default_features)
+		--no-default-features --features wat,dylib,staticlib,cranelift,wasi,middlewares
 
 build-capi-llvm: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,universal,dylib,object-file,llvm,wasi,middlewares $(capi_default_features)
+		--no-default-features --features wat,universal,dylib,staticlib,llvm,wasi,middlewares
 
 build-capi-llvm-universal: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,universal,llvm,wasi,middlewares $(capi_default_features)
+		--no-default-features --features wat,universal,llvm,wasi,middlewares
 
 build-capi-llvm-dylib: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,dylib,llvm,wasi,middlewares $(capi_default_features)
+		--no-default-features --features wat,dylib,llvm,wasi,middlewares
 
-build-capi-llvm-object-file: capi-setup
+build-capi-llvm-staticlib: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,object-file,llvm,wasi,middlewares $(capi_default_features)
+		--no-default-features --features wat,staticlib,llvm,wasi,middlewares
 
 # Headless (we include the minimal to be able to run)
 
@@ -491,19 +461,20 @@ build-capi-headless-dylib: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
 		--no-default-features --features dylib,wasi
 
-build-capi-headless-object-file: capi-setup
+build-capi-headless-staticlib: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features object-file,wasi
+		--no-default-features --features staticlib,wasi
 
 build-capi-headless-all: capi-setup
 	RUSTFLAGS="${RUSTFLAGS}" cargo build --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features universal,dylib,object-file,wasi
+		--no-default-features --features universal,dylib,staticlib,wasi
+
 
 ###########
 # Testing #
 ###########
 
-test: test-compilers test-packages test-examples test-deprecated
+test: test-compilers test-packages test-examples
 
 test-compilers:
 	cargo test --release --tests $(compiler_features)
@@ -550,7 +521,7 @@ test-capi: build-capi package-capi $(foreach compiler_engine,$(capi_compilers_en
 
 test-capi-crate-%:
 	WASMER_CAPI_CONFIG=$(shell echo $@ | sed -e s/test-capi-crate-//) cargo test --manifest-path lib/c-api/Cargo.toml --release \
-		--no-default-features --features deprecated,wat,universal,dylib,object-file,wasi,middlewares $(capi_default_features) $(capi_compiler_features) -- --nocapture
+		--no-default-features --features wat,universal,dylib,staticlib,wasi,middlewares $(capi_compiler_features) -- --nocapture
 
 test-capi-integration-%:
 	# Test the Wasmer C API tests for C
@@ -564,11 +535,6 @@ test-wasi-unit:
 test-examples:
 	cargo test --release $(compiler_features) --features wasi --examples
 
-test-deprecated:
-	cargo test --manifest-path lib/deprecated/runtime-core/Cargo.toml -p wasmer-runtime-core --release
-	cargo test --manifest-path lib/deprecated/runtime/Cargo.toml -p wasmer-runtime --release
-	cargo test --manifest-path lib/deprecated/runtime/Cargo.toml -p wasmer-runtime --release --examples
-
 test-integration:
 	cargo test -p wasmer-integration-tests-cli
 
@@ -581,7 +547,7 @@ package-wapm:
 ifneq (, $(filter 1, $(IS_DARWIN) $(IS_LINUX)))
 	if [ -d "wapm-cli" ]; then \
 		cp wapm-cli/$(TARGET_DIR)/wapm package/bin/ ;\
-		echo "#!/bin/bash\nwapm execute \"\$$@\"" > package/bin/wax ;\
+		echo -e "#!/bin/bash\nwapm execute \"\$$@\"" > package/bin/wax ;\
 		chmod +x package/bin/wax ;\
 	fi
 else
@@ -623,34 +589,29 @@ package-capi:
 	cp lib/c-api/wasm.h* package/include
 	cp lib/c-api/README.md package/include/README.md
 
-	# Windows
-	if [ -f $(TARGET_DIR)/wasmer_c_api.dll ]; then \
-		cp $(TARGET_DIR)/wasmer_c_api.dll package/lib/wasmer.dll ;\
+	if [ -f $(TARGET_DIR)/wasmer.dll ]; then \
+		cp $(TARGET_DIR)/wasmer.dll package/lib/wasmer.dll ;\
 	fi
-	if [ -f $(TARGET_DIR)/wasmer_c_api.lib ]; then \
-		cp $(TARGET_DIR)/wasmer_c_api.lib package/lib/wasmer.lib ;\
-	fi
-
-	# For some reason in macOS arm64 there are issues if we copy constantly in the install_name_tool util
-	rm -f package/lib/libwasmer.dylib
-	if [ -f $(TARGET_DIR)/libwasmer_c_api.dylib ]; then \
-		cp $(TARGET_DIR)/libwasmer_c_api.dylib package/lib/libwasmer.dylib ;\
-		install_name_tool -id "@rpath/libwasmer.dylib" package/lib/libwasmer.dylib ;\
+	if [ -f $(TARGET_DIR)/wasmer.lib ]; then \
+		cp $(TARGET_DIR)/wasmer.lib package/lib/wasmer.lib ;\
 	fi
 
-	if [ -f $(TARGET_DIR)/libwasmer_c_api.so ]; then \
-		cp $(TARGET_DIR)/libwasmer_c_api.so package/lib/libwasmer.so ;\
+	if [ -f $(TARGET_DIR)/libwasmer.dylib ]; then \
+		cp $(TARGET_DIR)/libwasmer.dylib package/lib/libwasmer.dylib ;\
 	fi
-	if [ -f $(TARGET_DIR)/libwasmer_c_api.a ]; then \
-		cp $(TARGET_DIR)/libwasmer_c_api.a package/lib/libwasmer.a ;\
+
+	if [ -f $(TARGET_DIR)/libwasmer.so ]; then \
+		cp $(TARGET_DIR)/libwasmer.so package/lib/libwasmer.so ;\
+	fi
+	if [ -f $(TARGET_DIR)/libwasmer.a ]; then \
+		cp $(TARGET_DIR)/libwasmer.a package/lib/libwasmer.a ;\
 	fi
 
 package-docs: build-docs build-docs-capi
-	mkdir -p "package/docs/c"
-	cp -R target/doc package/docs/crates
-	cp -R lib/c-api/doc/deprecated/html/* package/docs/c
-	echo '<!-- Build $(SOURCE_VERSION) --><meta http-equiv="refresh" content="0; url=crates/wasmer/index.html">' > package/docs/index.html
-	echo '<!-- Build $(SOURCE_VERSION) --><meta http-equiv="refresh" content="0; url=wasmer/index.html">' > package/docs/crates/index.html
+	mkdir -p "package/docs/crates"
+	cp -R target/doc/ package/docs/crates
+	echo '<meta http-equiv="refresh" content="0; url=crates/wasmer/index.html">' > package/docs/index.html
+	echo '<meta http-equiv="refresh" content="0; url=wasmer/index.html">' > package/docs/crates/index.html
 
 package: package-wapm package-wasmer package-minimal-headless-wasmer package-capi
 
@@ -677,7 +638,7 @@ install-wasmer:
 	install -Dm755 target/release/wasmer $(DESTDIR)/bin/wasmer
 
 install-capi-headers:
-	for header in lib/c-api/*.{h,hh}; do install -Dm644 "$$header" $(DESTDIR)/include/$$(basename $$header); done
+	for header in lib/c-api/*.h; do install -Dm644 "$$header" $(DESTDIR)/include/$$(basename $$header); done
 	install -Dm644 lib/c-api/README.md $(DESTDIR)/include/wasmer-README.md
 
 # Currently implemented for linux only. TODO
@@ -685,20 +646,25 @@ install-capi-lib:
 	pkgver=$$(target/release/wasmer --version | cut -d\  -f2) && \
 	shortver="$${pkgver%.*}" && \
 	majorver="$${shortver%.*}" && \
-	install -Dm755 target/release/libwasmer_c_api.so "$(DESTDIR)/lib/libwasmer.so.$$pkgver" && \
+	install -Dm755 target/release/libwasmer.so "$(DESTDIR)/lib/libwasmer.so.$$pkgver" && \
 	ln -sf "libwasmer.so.$$pkgver" "$(DESTDIR)/lib/libwasmer.so.$$shortver" && \
 	ln -sf "libwasmer.so.$$pkgver" "$(DESTDIR)/lib/libwasmer.so.$$majorver" && \
 	ln -sf "libwasmer.so.$$pkgver" "$(DESTDIR)/lib/libwasmer.so"
 
 install-capi-staticlib:
-	install -Dm644 target/release/libwasmer_c_api.a "$(DESTDIR)/lib/libwasmer.a"
+	install -Dm644 target/release/libwasmer.a "$(DESTDIR)/lib/libwasmer.a"
 
 install-misc:
 	install -Dm644 LICENSE "$(DESTDIR)"/share/licenses/wasmer/LICENSE
 
 install-pkgconfig:
-	unset WASMER_DIR # Make sure WASMER_INSTALL_PREFIX is set during build
-	target/release/wasmer config --pkg-config | install -Dm644 /dev/stdin "$(DESTDIR)"/lib/pkgconfig/wasmer.pc
+	# Make sure WASMER_INSTALL_PREFIX is set during build
+	unset WASMER_DIR; \
+	if pc="$$(target/release/wasmer config --pkg-config 1>/dev/null 2>/dev/null)"; then \
+		echo "$$pc" | install -Dm644 /dev/stdin "$(DESTDIR)"/lib/pkgconfig/wasmer.pc; \
+	else \
+		echo 1>&2 "WASMER_INSTALL_PREFIX was not set during build, not installing wasmer.pc"; \
+	fi
 
 install-wasmer-headless-minimal:
 	install -Dm755 target/release/wasmer-headless $(DESTDIR)/bin/wasmer-headless

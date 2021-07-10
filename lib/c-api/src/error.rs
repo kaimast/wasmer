@@ -13,7 +13,7 @@
 //! # use inline_c::assert_c;
 //! # fn main() {
 //! #    (assert_c! {
-//! # #include "tests/wasmer_wasm.h"
+//! # #include "tests/wasmer.h"
 //! #
 //! int main() {
 //!     // Create an invalid WebAssembly module from a WAT definition,
@@ -63,7 +63,7 @@ thread_local! {
 /// # Example
 ///
 /// ```rust,no_run
-/// # use wasmer_c_api::error::{update_last_error, CApiError};
+/// # use wasmer::error::{update_last_error, CApiError};
 ///
 /// update_last_error(CApiError {
 ///     msg: "Hello, World!".to_string(),
