@@ -227,7 +227,7 @@ impl Module {
         Ok(Self::from_artifact(store, artifact))
     }
 
-    /// Deserializes a a serialized Module located in a `Path` into a `Module`.
+    /// Deserializes a serialized Module located in a `Path` into a `Module`.
     /// > Note: the module has to be serialized before with the `serialize` method.
     ///
     /// # Safety

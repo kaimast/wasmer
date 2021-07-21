@@ -289,3 +289,8 @@ required-features = ["cranelift"]
 name = "async"
 path = "examples/async.rs"
 required-features = ["cranelift", "async"]
+
+[[example]]
+name = "duplicate"
+path = "examples/duplicate.rs"
+required-features = ["llvm", "async"]

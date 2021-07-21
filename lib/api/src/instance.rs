@@ -220,6 +220,15 @@ impl Instance {
     pub fn vmctx_ptr(&self) -> *mut VMContext {
         self.handle.lock().unwrap().vmctx_ptr()
     }
+
+    /// Duplicate the entire state of this instance and create a new one
+    pub fn duplicate(&self) -> Self {
+        Self {
+            handle: self.handle.duplicate(),
+            module: self.module.clone(),
+            exports: self.exports.clone(),
+        }
+    }
 }
 
 impl fmt::Debug for Instance {

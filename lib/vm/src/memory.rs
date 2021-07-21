@@ -120,6 +120,9 @@ pub trait Memory: fmt::Debug + Send + Sync + MemoryUsage {
     ///
     /// The pointer returned in [`VMMemoryDefinition`] must be valid for the lifetime of this memory.
     fn vmmemory(&self) -> NonNull<VMMemoryDefinition>;
+
+    /// Create an identical copy of this memory
+    fn duplicate(&self) -> Result<Box<dyn Memory>, String>;
 }
 
 /// A linear memory instance.
@@ -180,6 +183,13 @@ struct WasmMmap {
     alloc: Mmap,
     // The current logical size in wasm pages of this linear memory.
     size: Pages,
+}
+
+impl WasmMmap {
+    fn duplicate(&self) -> Result<Self, String> {
+        let alloc = self.alloc.duplicate()?;
+        Ok(Self{ alloc, size: self.size })
+    }
 }
 
 impl LinearMemory {
@@ -421,5 +431,23 @@ impl Memory for LinearMemory {
     fn vmmemory(&self) -> NonNull<VMMemoryDefinition> {
         let _mmap_guard = self.mmap.lock().unwrap();
         unsafe { self.get_vm_memory_definition() }
+    }
+
+    // Create an identical copy of this memory
+    fn duplicate(&self) -> Result<Box<dyn Memory>, String> {
+        let mmap = {
+            let lock = self.mmap.lock().unwrap();
+            lock.duplicate()?
+        };
+
+        Ok(Box::new(Self{
+            style: self.style,
+            mmap: Mutex::new(mmap),
+            maximum: self.maximum,
+            memory: self.memory,
+            needs_signal_handlers: self.needs_signal_handlers,
+            offset_guard_size: self.offset_guard_size,
+            vm_memory_definition: self.vm_memory_definition,
+        }))
     }
 }

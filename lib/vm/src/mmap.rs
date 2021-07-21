@@ -11,6 +11,8 @@ use std::io;
 use std::ptr;
 use std::slice;
 
+use std::os::unix::io::RawFd;
+
 /// Round `size` up to the nearest multiple of `page_size`.
 fn round_up_to_page_size(size: usize, page_size: usize) -> usize {
     (size + (page_size - 1)) & !(page_size - 1)
@@ -26,6 +28,7 @@ pub struct Mmap {
     // the coordination all happens at the OS layer.
     ptr: usize,
     len: usize,
+    memfd: Option<RawFd>,
 }
 
 impl Mmap {
@@ -38,6 +41,7 @@ impl Mmap {
         Self {
             ptr: empty.as_ptr() as usize,
             len: 0,
+            memfd: None,
         }
     }
 
@@ -68,6 +72,12 @@ impl Mmap {
         }
 
         log::trace!("Memory mapping {} bytes", mapping_size);
+        let label = std::ffi::CString::new("wasmer").unwrap();
+        let flags = nix::sys::memfd::MemFdCreateFlag::empty();
+        let memfd = nix::sys::memfd::memfd_create(&label, flags)
+                .expect("Failed to create memfd");
+
+        nix::unistd::ftruncate(memfd, mapping_size as i64).expect("Failed to resize memfd");
 
         Ok(if accessible_size == mapping_size {
             // Allocate a single read-write region at once.
@@ -76,8 +86,8 @@ impl Mmap {
                     ptr::null_mut(),
                     mapping_size,
                     libc::PROT_READ | libc::PROT_WRITE,
-                    libc::MAP_PRIVATE | libc::MAP_ANON,
-                    -1,
+                    libc::MAP_SHARED,
+                    memfd,
                     0,
                 )
             };
@@ -88,6 +98,7 @@ impl Mmap {
             Self {
                 ptr: ptr as usize,
                 len: mapping_size,
+                memfd: Some(memfd),
             }
         } else {
             // Reserve the mapping size.
@@ -96,8 +107,8 @@ impl Mmap {
                     ptr::null_mut(),
                     mapping_size,
                     libc::PROT_NONE,
-                    libc::MAP_PRIVATE | libc::MAP_ANON,
-                    -1,
+                    libc::MAP_SHARED,
+                    memfd,
                     0,
                 )
             };
@@ -108,6 +119,7 @@ impl Mmap {
             let mut result = Self {
                 ptr: ptr as usize,
                 len: mapping_size,
+                memfd: Some(memfd),
             };
 
             if accessible_size != 0 {
@@ -260,6 +272,34 @@ impl Mmap {
     /// Return whether any memory has been allocated.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Create an identical (COW) copy of this memory-mapped region
+    pub fn duplicate(&self) -> Result<Self, String> {
+        let memfd = if let Some(memfd) = self.memfd {
+            memfd
+        } else {
+            return Err(String::from("Not a Zygote"));
+        };
+
+        let ptr = unsafe{ libc::mmap(
+            ptr::null_mut(),
+            self.len,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_PRIVATE,
+            memfd,
+            0,
+        )};
+
+        if ptr as isize == -1_isize {
+            return Err(io::Error::last_os_error().to_string());
+        }
+
+        Ok(Self {
+            ptr: ptr as usize,
+            len: self.len,
+            memfd: None,
+        })
     }
 }
 

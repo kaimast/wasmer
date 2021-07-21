@@ -865,6 +865,10 @@ impl Instance {
         let import = self.imported_table(index);
         &*import.from
     }
+
+    pub (crate) fn duplicate(&self) -> Self {
+
+    }
 }
 
 /// A handle holding an `InstanceRef`, which holds an `Instance`
@@ -1283,6 +1287,11 @@ impl InstanceHandle {
             }
         }
         Ok(())
+    }
+
+    pub (crate) fn duplicate(&self) -> Self {
+        let instance = unsafe{ self.instance().duplicate() };
+        Self{ instance }
     }
 }
 
