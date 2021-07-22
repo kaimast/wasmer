@@ -94,7 +94,7 @@ pub trait Artifact: Send + Sync + Upcastable + MemoryUsage {
         &self,
         tunables: &dyn Tunables,
         resolver: &dyn Resolver,
-        host_state: Box<dyn Any>,
+        host_state: Arc<dyn Any>,
     ) -> Result<InstanceHandle, InstantiationError> {
         self.preinstantiate()?;
 

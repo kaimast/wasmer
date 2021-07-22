@@ -96,7 +96,7 @@ pub(crate) struct Instance {
     funcrefs: BoxedSlice<FunctionIndex, VMFuncRef>,
 
     /// Hosts can store arbitrary per-instance information here.
-    host_state: Box<dyn Any>,
+    host_state: Arc<dyn Any>,
 
     /// Functions to operate on host environments in the imports
     /// and pointers to the environments.
@@ -139,7 +139,7 @@ pub enum ImportFunctionEnv {
         /// The destructor to clean up the type in `env`.
         ///
         /// # Safety
-        /// - This function must be called ina synchronized way. For
+        /// - This function must be called in a synchronized way. For
         ///   example, in the `Drop` implementation of this type.
         destructor: unsafe fn(*mut ffi::c_void),
 
@@ -866,8 +866,60 @@ impl Instance {
         &*import.from
     }
 
-    pub (crate) fn duplicate(&self) -> Self {
+    /// Create an identical copy of this instance
+    pub (crate) fn duplicate(&self) -> InstanceRef {
+        let (allocator, _memories, _tables) =
+            InstanceAllocator::new(&*self.module);
 
+        let offsets = allocator.offsets().clone();
+
+        // duplicate memory
+        let memories = {
+            let mut memories = PrimaryMap::new();
+            for (_, memory) in self.memories.iter() {
+                let memory = memory.duplicate().expect("Failed to duplicate memory");
+                memories.push(memory);
+            }
+            memories.into_boxed_slice()
+        };
+
+        let mut instance_ref = {
+            // Create new copy of the instance
+            // FIXME also duplicate globals and tables
+            let instance = Instance {
+                module: self.module.clone(),
+                offsets: offsets.clone(), memories,
+                tables: self.tables.clone(),
+                globals: self.globals.clone(),
+                functions: self.functions.clone(),
+                function_call_trampolines: self.function_call_trampolines.clone(),
+                passive_elements: self.passive_elements.clone(),
+                passive_data: self.passive_data.clone(),
+                host_state: self.host_state.clone(),
+                funcrefs: self.funcrefs.clone(),
+                imported_function_envs: self.imported_function_envs.clone(),
+                vmctx: VMContext {},
+            };
+
+            allocator.write_instance(instance)
+        };
+
+        let instance = instance_ref.as_mut().unwrap();
+        let vmctx_size = usize::try_from(offsets.size_of_vmctx())
+            .expect("Failed to convert the size of `vmctx` to a `usize`");
+
+        unsafe {
+            let src_ptr: *const VMContext = &self.vmctx;
+            let dst_ptr: *mut VMContext = &mut instance.vmctx;
+
+            ptr::copy(
+                src_ptr as *const u8,
+                dst_ptr as *mut u8,
+                vmctx_size,
+            );
+        }
+
+        instance_ref
     }
 }
 
@@ -916,7 +968,7 @@ impl InstanceHandle {
         imports: Imports,
         vmshared_signatures: BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
         func_data_registry: &FuncDataRegistry,
-        host_state: Box<dyn Any>,
+        host_state: Arc<dyn Any>,
         imported_function_envs: BoxedSlice<FunctionIndex, ImportFunctionEnv>,
     ) -> Result<Self, Trap> {
         let vmctx_globals = finished_globals
@@ -967,6 +1019,7 @@ impl InstanceHandle {
                 instance: instance_ref,
             }
         };
+
         let instance = handle.instance().as_ref();
 
         ptr::copy(
@@ -1289,7 +1342,8 @@ impl InstanceHandle {
         Ok(())
     }
 
-    pub (crate) fn duplicate(&self) -> Self {
+    /// Create an identical copy of this instance
+    pub fn duplicate(&self) -> Self {
         let instance = unsafe{ self.instance().duplicate() };
         Self{ instance }
     }

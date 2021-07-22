@@ -18,6 +18,7 @@ use std::convert::TryInto;
 use std::fmt;
 use std::ptr::NonNull;
 use std::sync::Mutex;
+use std::sync::Arc;
 use thiserror::Error;
 use wasmer_types::{Bytes, MemoryType, Pages};
 
@@ -122,7 +123,7 @@ pub trait Memory: fmt::Debug + Send + Sync + MemoryUsage {
     fn vmmemory(&self) -> NonNull<VMMemoryDefinition>;
 
     /// Create an identical copy of this memory
-    fn duplicate(&self) -> Result<Box<dyn Memory>, String>;
+    fn duplicate(&self) -> Result<Arc<dyn Memory>, String>;
 }
 
 /// A linear memory instance.
@@ -163,6 +164,15 @@ enum VMMemoryDefinitionOwnership {
     /// memory. This is how an imported memory that doesn't come from another
     /// Wasm module should be stored.
     HostOwned(Box<UnsafeCell<VMMemoryDefinition>>),
+}
+
+impl VMMemoryDefinitionOwnership {
+    pub fn try_clone(&self) -> Option<Self> {
+        match self{
+            Self::VMOwned(inner) => Some(Self::VMOwned(inner.clone())),
+            Self::HostOwned(_) => None,
+        }
+    }
 }
 
 /// We must implement this because of `VMMemoryDefinitionOwnership::VMOwned`.
@@ -434,20 +444,22 @@ impl Memory for LinearMemory {
     }
 
     // Create an identical copy of this memory
-    fn duplicate(&self) -> Result<Box<dyn Memory>, String> {
+    fn duplicate(&self) -> Result<Arc<dyn Memory>, String> {
         let mmap = {
             let lock = self.mmap.lock().unwrap();
             lock.duplicate()?
         };
 
-        Ok(Box::new(Self{
-            style: self.style,
+        let vm_memory_definition = self.vm_memory_definition.try_clone().unwrap();
+
+        Ok(Arc::new(Self{
+            style: self.style.clone(),
             mmap: Mutex::new(mmap),
             maximum: self.maximum,
             memory: self.memory,
             needs_signal_handlers: self.needs_signal_handlers,
             offset_guard_size: self.offset_guard_size,
-            vm_memory_definition: self.vm_memory_definition,
+            vm_memory_definition
         }))
     }
 }

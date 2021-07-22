@@ -156,9 +156,8 @@ impl InstanceRef {
         (&mut *ptr).as_mut()
     }
 
-    pub(crate) unsafe fn duplicate(&self) -> Self {
-        let ptr = self.as_ref().duplicate();
-        Self::new(ptr, self.0.instance_layout.clone())
+    pub(crate) unsafe fn duplicate(&self) -> InstanceRef {
+        self.as_ref().duplicate()
     }
 }
 

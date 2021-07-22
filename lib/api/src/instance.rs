@@ -223,8 +223,10 @@ impl Instance {
 
     /// Duplicate the entire state of this instance and create a new one
     pub fn duplicate(&self) -> Self {
+        let handle = self.handle.lock().unwrap();
+
         Self {
-            handle: self.handle.duplicate(),
+            handle: Arc::new(Mutex::new(handle.duplicate())),
             module: self.module.clone(),
             exports: self.exports.clone(),
         }
