@@ -1,19 +1,25 @@
-use wasmer::{imports, wat2wasm, Instance, Module, Store};
+use wasmer::{imports, wat2wasm, WasmerEnv, Function, Instance, Module, Store};
 use wasmer_compiler_llvm::LLVM;
 use wasmer_engine_universal::Universal;
 use std::convert::TryInto;
 use std::time::Instant;
+
+#[derive(Clone, Debug, WasmerEnv)]
+struct FnEnv {
+    number: i32
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Let's declare the Wasm module with the text representation.
     let wasm_bytes = wat2wasm(
         br#"
         (module
-          (type $no_op_t(func (result i32)))
-          (func $no_op_f (type $no_op_t) (result i32)
-            i32.const 1337
+          (func $host_function (import "" "host_function") (result i32))
+          (type $my_func_t(func (result i32)))
+          (func $my_func_f (type $my_func_t) (result i32)
+           (call $host_function)
           )
-          (export "no_op" (func $no_op_f)))
+          (export "my_func" (func $my_func_f)))
         "#,
     )?;
 
@@ -25,14 +31,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Let's compile the Wasm module.
     let module = Module::new(&store, wasm_bytes)?;
 
+    fn host_fn(env: &FnEnv) -> i32 {
+        println!("HOST {:?}", env);
+        env.number
+    }
+
     // Create an import object.
-    let import_object = imports!{};
+    let host_function1 = Function::new_native_with_env(&store, FnEnv{ number: 42 }, host_fn);
+    let import_object1 = imports!{
+        "" => {
+            "host_function" => host_function1,
+        },
+    };
+
     println!("Instantiating module...");
 
     let start = Instant::now();
 
     // Let's instantiate the Wasm module.
-    let instance1 = Instance::new(&module, &import_object)?;
+    let instance1 = Instance::new(&module, &import_object1)?;
 
     let end = Instant::now();
     println!("Took {}us", (end-start).as_micros());
@@ -40,14 +57,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Cloning instance");
     let start = Instant::now();
 
-    // Create an identical copy of the instance
-    let instance2 = instance1.duplicate();
+    let host_function2 = Function::new_native_with_env(&store, FnEnv{ number: 1337 }, host_fn);
+    let import_object2 = imports!{
+        "" => {
+            "host_function" => host_function2,
+        },
+    };
+
+    let instance2 = unsafe{ instance1.duplicate(&import_object2) };
     let end = Instant::now();
     println!("Took {}us", (end-start).as_micros());
 
-
-    let func1 = instance1.exports.get_function("no_op").unwrap();
-    let func2 = instance2.exports.get_function("no_op").unwrap();
+    let func1 = instance1.exports.get_function("my_func").unwrap();
+    let func2 = instance2.exports.get_function("my_func").unwrap();
 
     let result1 = func1.call(&[]).expect("Function call 1 failed");
     let result2 = func2.call(&[]).expect("Function call 2 failed");
@@ -55,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result1: i32 = result1[0].clone().try_into().unwrap();
     let result2: i32 = result2[0].clone().try_into().unwrap();
 
-    assert!(result1 == 1337);
+    assert!(result1 == 42);
     assert!(result2 == 1337);
 
     println!("Success");

@@ -867,7 +867,7 @@ impl Instance {
     }
 
     /// Create an identical copy of this instance
-    pub (crate) fn duplicate(&self) -> InstanceRef {
+    pub (crate) unsafe fn duplicate(&self, mut imports: Imports, vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>, func_data_registry: &FuncDataRegistry) -> InstanceRef {
         let (allocator, _memories, _tables) =
             InstanceAllocator::new(&*self.module);
 
@@ -897,27 +897,62 @@ impl Instance {
                 passive_data: self.passive_data.clone(),
                 host_state: self.host_state.clone(),
                 funcrefs: self.funcrefs.clone(),
-                imported_function_envs: self.imported_function_envs.clone(),
+                imported_function_envs: imports.get_imported_function_envs(),
                 vmctx: VMContext {},
             };
 
             allocator.write_instance(instance)
         };
 
+        // Set the funcrefs after we've built the instance
+        {
+            let instance = instance_ref.as_mut().unwrap();
+            let vmctx_ptr = instance.vmctx_ptr();
+            instance.funcrefs = build_funcrefs(
+                &*instance.module,
+                &imports,
+                &instance.functions,
+                func_data_registry,
+                &vmshared_signatures,
+                vmctx_ptr,
+            );
+        }
+
         let instance = instance_ref.as_mut().unwrap();
         let vmctx_size = usize::try_from(offsets.size_of_vmctx())
             .expect("Failed to convert the size of `vmctx` to a `usize`");
 
-        unsafe {
-            let src_ptr: *const VMContext = &self.vmctx;
-            let dst_ptr: *mut VMContext = &mut instance.vmctx;
+        let src_ptr: *const VMContext = &self.vmctx;
+        let dst_ptr: *mut VMContext = &mut instance.vmctx;
 
-            ptr::copy(
-                src_ptr as *const u8,
-                dst_ptr as *mut u8,
-                vmctx_size,
-            );
-        }
+        // Copy zygote state
+        ptr::copy(
+            src_ptr as *const u8,
+            dst_ptr as *mut u8,
+            vmctx_size,
+        );
+
+        // Overwrite imports
+        ptr::copy(
+            imports.functions.values().as_slice().as_ptr(),
+            instance.imported_functions_ptr() as *mut VMFunctionImport,
+            imports.functions.len(),
+        );
+        ptr::copy(
+            imports.tables.values().as_slice().as_ptr(),
+            instance.imported_tables_ptr() as *mut VMTableImport,
+            imports.tables.len(),
+        );
+        ptr::copy(
+            imports.memories.values().as_slice().as_ptr(),
+            instance.imported_memories_ptr() as *mut VMMemoryImport,
+            imports.memories.len(),
+        );
+        ptr::copy(
+            imports.globals.values().as_slice().as_ptr(),
+            instance.imported_globals_ptr() as *mut VMGlobalImport,
+            imports.globals.len(),
+        );
 
         instance_ref
     }
@@ -1069,7 +1104,7 @@ impl InstanceHandle {
     }
 
     /// Return a reference to the contained `Instance`.
-    pub(crate) fn instance(&self) -> &InstanceRef {
+    pub fn instance(&self) -> &InstanceRef {
         &self.instance
     }
 
@@ -1343,9 +1378,8 @@ impl InstanceHandle {
     }
 
     /// Create an identical copy of this instance
-    pub fn duplicate(&self) -> Self {
-        let instance = unsafe{ self.instance().duplicate() };
-        Self{ instance }
+    pub unsafe fn duplicate(&self, imports: Imports, vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>, func_data_registry: &FuncDataRegistry) -> Self {
+        Self{ instance: self.instance().as_ref().duplicate(imports, vmshared_signatures, func_data_registry) }
     }
 }
 

@@ -155,10 +155,6 @@ impl InstanceRef {
         let ptr: *mut InstanceInner = Arc::as_ptr(&self.0) as *mut _;
         (&mut *ptr).as_mut()
     }
-
-    pub(crate) unsafe fn duplicate(&self) -> InstanceRef {
-        self.as_ref().duplicate()
-    }
 }
 
 /// A weak instance ref. This type does not keep the underlying `Instance` alive

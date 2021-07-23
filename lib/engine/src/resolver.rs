@@ -206,10 +206,9 @@ pub fn resolve_imports(
                 let destructor = f.metadata.as_ref().map(|m| m.host_env_drop_fn);
 
                 #[cfg(feature = "async")]
-                let set_yielder = f.metadata.as_ref().map(|m| m.host_env_set_yielder_fn);
+                let import_function_env = {
+                    let set_yielder = f.metadata.as_ref().map(|m| m.host_env_set_yielder_fn);
 
-                #[cfg(feature = "async")]
-                let import_function_env =
                     if let (Some(clone), Some(destructor), Some(set_yielder)) =
                         (clone, destructor, set_yielder)
                     {
@@ -222,7 +221,8 @@ pub fn resolve_imports(
                         }
                     } else {
                         ImportFunctionEnv::NoEnv
-                    };
+                    }
+                };
 
                 #[cfg(not(feature = "async"))]
                 let import_function_env =
