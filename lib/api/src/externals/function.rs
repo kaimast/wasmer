@@ -243,8 +243,6 @@ impl Function {
         >(dynamic_ctx, import_init_function_ptr);
 
         // We don't yet have the address with the Wasm ABI signature.
-
-        // We don't yet have the address with the Wasm ABI signature.
         // The engine linker will replace the address with one pointing to a
         // generated dynamic trampoline.
         let address = std::ptr::null() as *const VMFunctionBody;

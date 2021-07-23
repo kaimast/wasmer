@@ -112,6 +112,7 @@ impl Instance {
     /// Those are, as defined by the spec:
     ///  * Link errors that happen when plugging the imports into the instance
     ///  * Runtime errors that happen when running the module `start` function.
+    #[ tracing::instrument(skip(resolver)) ]
     pub fn new(module: &Module, resolver: &dyn Resolver) -> Result<Self, InstantiationError> {
         let store = module.store();
         let handle = module.instantiate(resolver)?;
@@ -222,7 +223,8 @@ impl Instance {
     }
 
     /// Duplicate the entire state of this instance and create a new one
-    pub unsafe fn duplicate(&self, resolver: &dyn Resolver) -> Self {
+    #[ tracing::instrument(skip(resolver)) ]
+    pub unsafe fn duplicate(&self, resolver: &dyn Resolver) -> Result<Self, InstantiationError> {
         let handle = self.handle.lock().unwrap();
         let artifact = self.module().artifact();
 
@@ -230,6 +232,9 @@ impl Instance {
         let imports = wasmer_engine::resolve_imports(self.module().info(), resolver, artifact.finished_dynamic_function_trampolines(), artifact.memory_styles(), artifact.table_styles()).unwrap();
 
         let instance_handle = handle.duplicate(imports, artifact.signatures(), artifact.func_data_registry());
+
+        // Is this needed?
+        // artifact.finish_instantiation(self.store(), &instance_handle)?;
 
         let exports = self.module()
             .exports()
@@ -241,10 +246,17 @@ impl Instance {
             })
             .collect::<Exports>();
 
-        Self {
+        let instance = Self {
             handle: Arc::new(Mutex::new(instance_handle)),
             module: self.module.clone(), exports,
-        }
+        };
+
+        instance
+            .handle
+            .lock().unwrap()
+            .initialize_host_envs::<HostEnvInitError>(&instance as *const _ as *const _)?;
+
+        Ok(instance)
     }
 }
 

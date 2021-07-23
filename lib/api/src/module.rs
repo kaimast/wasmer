@@ -128,6 +128,7 @@ impl Module {
     /// Opposed to [`Module::new`], this function is not compatible with
     /// the WebAssembly text format (if the "wat" feature is enabled for
     /// this crate).
+    #[ tracing::instrument ]
     pub fn from_binary(store: &Store, binary: &[u8]) -> Result<Self, CompileError> {
         Self::validate(store, binary)?;
         unsafe { Self::from_binary_unchecked(store, binary) }
