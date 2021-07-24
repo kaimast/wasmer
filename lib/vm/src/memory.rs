@@ -166,15 +166,6 @@ enum VMMemoryDefinitionOwnership {
     HostOwned(Box<UnsafeCell<VMMemoryDefinition>>),
 }
 
-impl VMMemoryDefinitionOwnership {
-    pub fn try_clone(&self) -> Option<Self> {
-        match self{
-            Self::VMOwned(inner) => Some(Self::VMOwned(inner.clone())),
-            Self::HostOwned(_) => None,
-        }
-    }
-}
-
 /// We must implement this because of `VMMemoryDefinitionOwnership::VMOwned`.
 /// This is correct because synchronization of memory accesses is controlled
 /// by the VM.
@@ -445,12 +436,31 @@ impl Memory for LinearMemory {
 
     // Create an identical copy of this memory
     fn duplicate(&self) -> Result<Arc<dyn Memory>, String> {
-        let mmap = {
+        let mut mmap = {
             let lock = self.mmap.lock().unwrap();
             lock.duplicate()?
         };
 
-        let vm_memory_definition = self.vm_memory_definition.try_clone().unwrap();
+        let base_ptr = mmap.alloc.as_mut_ptr();
+        let mem_length = self.memory.minimum.bytes().0.try_into().unwrap();
+
+        let vm_memory_definition = match self.vm_memory_definition {
+            VMMemoryDefinitionOwnership::VMOwned(mem_loc) => {
+                let mut ptr = mem_loc.clone();
+                let md = unsafe{ ptr.as_mut() };
+                md.base = base_ptr;
+                md.current_length = mem_length;
+                VMMemoryDefinitionOwnership::VMOwned(mem_loc)
+            }
+            VMMemoryDefinitionOwnership::HostOwned(_) => {
+                VMMemoryDefinitionOwnership::HostOwned(Box::new(UnsafeCell::new(
+                    VMMemoryDefinition {
+                        base: base_ptr,
+                        current_length: mem_length,
+                    },
+                )))
+            }
+        };
 
         Ok(Arc::new(Self{
             style: self.style.clone(),
