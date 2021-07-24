@@ -446,8 +446,8 @@ impl Memory for LinearMemory {
 
         let vm_memory_definition = match self.vm_memory_definition {
             VMMemoryDefinitionOwnership::VMOwned(mem_loc) => {
-                let mut ptr = mem_loc.clone();
-                let md = unsafe{ ptr.as_mut() };
+                let mut mem_loc = mem_loc.clone();
+                let md = unsafe{ mem_loc.as_mut() };
                 md.base = base_ptr;
                 md.current_length = mem_length;
                 VMMemoryDefinitionOwnership::VMOwned(mem_loc)
