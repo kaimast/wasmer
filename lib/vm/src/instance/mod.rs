@@ -891,10 +891,6 @@ impl Instance {
             tables.into_boxed_slice()
         };
 
-        if !table_definition_locations.is_empty() {
-            panic!("Cannot clone tables (yet)");
-        }
-
         // duplicate memory
         let memories = {
             let mut memories = PrimaryMap::new();
