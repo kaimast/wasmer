@@ -435,7 +435,7 @@ impl Memory for LinearMemory {
     }
 
     // Create an identical copy of this memory
-    fn duplicate(&self, vm_memory_location: NonNull<VMMemoryDefinition>) -> Result<Arc<dyn Memory>, String> {
+    fn duplicate(&self, mut mem_loc: NonNull<VMMemoryDefinition>) -> Result<Arc<dyn Memory>, String> {
         if !matches!(self.style, MemoryStyle::Dynamic{..}) {
             return Err(String::from("Can only duplicate dynamic memory"));
         }
@@ -445,15 +445,11 @@ impl Memory for LinearMemory {
             lock.duplicate()?
         };
 
-        let base_ptr = mmap.alloc.as_mut_ptr();
-        let mem_length = self.memory.minimum.bytes().0.try_into().unwrap();
-
         let vm_memory_definition = match self.vm_memory_definition {
-            VMMemoryDefinitionOwnership::VMOwned(_) => {
-                let mut mem_loc = vm_memory_location;
+            VMMemoryDefinitionOwnership::VMOwned(old_loc) => {
                 let md = unsafe{ mem_loc.as_mut() };
-                md.base = base_ptr;
-                md.current_length = mem_length;
+                md.base = mmap.alloc.as_mut_ptr();
+                md.current_length = unsafe{ old_loc.as_ref().current_length };
                 VMMemoryDefinitionOwnership::VMOwned(mem_loc)
             }
             VMMemoryDefinitionOwnership::HostOwned(_) => {
