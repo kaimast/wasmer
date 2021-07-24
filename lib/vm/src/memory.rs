@@ -123,7 +123,7 @@ pub trait Memory: fmt::Debug + Send + Sync + MemoryUsage {
     fn vmmemory(&self) -> NonNull<VMMemoryDefinition>;
 
     /// Create an identical copy of this memory
-    fn duplicate(&self) -> Result<Arc<dyn Memory>, String>;
+    fn duplicate(&self, vm_memory_location: NonNull<VMMemoryDefinition>) -> Result<Arc<dyn Memory>, String>;
 }
 
 /// A linear memory instance.
@@ -435,7 +435,7 @@ impl Memory for LinearMemory {
     }
 
     // Create an identical copy of this memory
-    fn duplicate(&self) -> Result<Arc<dyn Memory>, String> {
+    fn duplicate(&self, vm_memory_location: NonNull<VMMemoryDefinition>) -> Result<Arc<dyn Memory>, String> {
         if !matches!(self.style, MemoryStyle::Dynamic{..}) {
             return Err(String::from("Can only duplicate dynamic memory"));
         }
@@ -449,20 +449,15 @@ impl Memory for LinearMemory {
         let mem_length = self.memory.minimum.bytes().0.try_into().unwrap();
 
         let vm_memory_definition = match self.vm_memory_definition {
-            VMMemoryDefinitionOwnership::VMOwned(mem_loc) => {
-                let mut mem_loc = mem_loc.clone();
+            VMMemoryDefinitionOwnership::VMOwned(_) => {
+                let mut mem_loc = vm_memory_location;
                 let md = unsafe{ mem_loc.as_mut() };
                 md.base = base_ptr;
                 md.current_length = mem_length;
                 VMMemoryDefinitionOwnership::VMOwned(mem_loc)
             }
             VMMemoryDefinitionOwnership::HostOwned(_) => {
-                VMMemoryDefinitionOwnership::HostOwned(Box::new(UnsafeCell::new(
-                    VMMemoryDefinition {
-                        base: base_ptr,
-                        current_length: mem_length,
-                    },
-                )))
+                panic!("Can only duplicate VMOwned memory (for now)");
             }
         };
 

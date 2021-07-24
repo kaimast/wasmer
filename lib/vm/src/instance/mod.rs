@@ -868,7 +868,7 @@ impl Instance {
 
     /// Create an identical copy of this instance
     pub (crate) unsafe fn duplicate(&self, mut imports: Imports, vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>, func_data_registry: &FuncDataRegistry) -> InstanceRef {
-        let (allocator, _memories, _tables) =
+        let (allocator, memory_definition_locations, _tables) =
             InstanceAllocator::new(&*self.module);
 
         let offsets = allocator.offsets().clone();
@@ -876,8 +876,9 @@ impl Instance {
         // duplicate memory
         let memories = {
             let mut memories = PrimaryMap::new();
-            for (_, memory) in self.memories.iter() {
-                let memory = memory.duplicate().expect("Failed to duplicate memory");
+            for (pos, (_, memory)) in self.memories.iter().enumerate() {
+                let mem_loc = memory_definition_locations[pos];
+                let memory = memory.duplicate(mem_loc).expect("Failed to duplicate memory");
                 memories.push(memory);
             }
             memories.into_boxed_slice()
