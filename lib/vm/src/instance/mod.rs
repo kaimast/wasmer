@@ -18,7 +18,7 @@ use crate::func_data_registry::{FuncDataRegistry, VMFuncRef};
 use crate::global::Global;
 use crate::imports::Imports;
 use crate::memory::{Memory, MemoryError};
-use crate::table::{Table, TableElement};
+use crate::table::{Table, LinearTable, TableElement};
 use crate::trap::{catch_traps, Trap, TrapCode, TrapHandler};
 use crate::vmcontext::{
     VMBuiltinFunctionsArray, VMCallerCheckedAnyfunc, VMContext, VMFunctionBody,
@@ -873,6 +873,24 @@ impl Instance {
 
         let offsets = allocator.offsets().clone();
 
+        // duplicate tables
+        // TODO make more efficient / use mmap
+        let tables = {
+            let mut tables = PrimaryMap::<LocalTableIndex, Arc<(dyn Table+'static)>>::new();
+            for (pos, (_, old_table)) in self.tables.iter().enumerate() {
+                let table_loc = table_definition_locations[pos];
+                let table = LinearTable::from_definition(old_table.ty(), old_table.style(), table_loc).expect("Failed to create table");
+
+                for idx in 0..old_table.size() {
+                    table.set(idx, old_table.get(idx).unwrap()).unwrap();
+                }
+
+                tables.push(Arc::new(table));
+            }
+
+            tables.into_boxed_slice()
+        };
+
         if !table_definition_locations.is_empty() {
             panic!("Cannot clone tables (yet)");
         }
@@ -893,8 +911,8 @@ impl Instance {
             // FIXME also duplicate globals and tables
             let instance = Instance {
                 module: self.module.clone(),
-                offsets: offsets.clone(), memories,
-                tables: self.tables.clone(),
+                offsets: offsets.clone(),
+                memories, tables,
                 globals: self.globals.clone(),
                 functions: self.functions.clone(),
                 function_call_trampolines: self.function_call_trampolines.clone(),
