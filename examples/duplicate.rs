@@ -1,6 +1,8 @@
 use wasmer::{imports, wat2wasm, WasmerEnv, Function, Instance, Module, Store, LazyInit, Memory};
 use wasmer_compiler_llvm::LLVM;
 use wasmer_engine_universal::Universal;
+use wasmer_engine::Engine;
+
 use std::convert::TryInto;
 use std::time::Instant;
 
@@ -27,8 +29,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "#,
     )?;
 
+    let engine = Universal::new(LLVM::default()).engine();
+    let mut tunables = wasmer::BaseTunables::for_target(engine.target());
+    tunables.static_memory_bound = wasmer::Pages(0); // Always use dynamic memory
+
     // Create a Store.
-    let store = Store::new(&Universal::new(LLVM::default()).engine());
+    let store = Store::new_with_tunables(&engine, tunables);
 
     println!("Compiling module...");
 

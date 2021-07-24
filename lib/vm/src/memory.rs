@@ -436,6 +436,10 @@ impl Memory for LinearMemory {
 
     // Create an identical copy of this memory
     fn duplicate(&self) -> Result<Arc<dyn Memory>, String> {
+        if !matches!(self.style, MemoryStyle::Dynamic{..}) {
+            return Err(String::from("Can only duplicate dynamic memory"));
+        }
+
         let mut mmap = {
             let lock = self.mmap.lock().unwrap();
             lock.duplicate()?
