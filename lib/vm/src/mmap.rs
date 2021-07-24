@@ -106,7 +106,8 @@ impl Mmap {
                 libc::mmap(
                     ptr::null_mut(),
                     mapping_size,
-                    libc::PROT_NONE,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    //FIXME libc::PROT_NONE,
                     libc::MAP_SHARED,
                     memfd,
                     0,
