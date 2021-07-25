@@ -379,24 +379,26 @@ impl VMMemoryDefinition {
         // https://webassembly.github.io/reference-types/core/exec/instructions.html#exec-memory-copy
         if src
             .checked_add(len)
-            .map_or(true, |n| n > self.current_length)
-            || dst
+            .map_or(true, |n| n > self.current_length) {
+            log::debug!("memory_copy tried to access out of bounds source memory at {:#X}-{:#X}, but data len is {:#X} (base_ptr={:#X})", src, src.checked_add(len).unwrap_or(0), self.current_length, self.base as usize);
+            Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
+        } else if  dst
                 .checked_add(len)
-                .map_or(true, |m| m > self.current_length)
-        {
-            return Err(Trap::lib(TrapCode::HeapAccessOutOfBounds));
+                .map_or(true, |m| m > self.current_length) {
+            log::debug!("memory_copy tried to access out of bounds destination memory at {:#X}-{:#X}, but data len is {:#X} (base_ptr={:#X})", dst, dst.checked_add(len).unwrap_or(0), self.current_length, self.base as usize);
+            Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
+        } else {
+            let dst = usize::try_from(dst).unwrap();
+            let src = usize::try_from(src).unwrap();
+
+            // Bounds and casts are checked above, by this point we know that
+            // everything is safe.
+            let dst = self.base.add(dst);
+            let src = self.base.add(src);
+            ptr::copy(src, dst, len as usize);
+
+            Ok(())
         }
-
-        let dst = usize::try_from(dst).unwrap();
-        let src = usize::try_from(src).unwrap();
-
-        // Bounds and casts are checked above, by this point we know that
-        // everything is safe.
-        let dst = self.base.add(dst);
-        let src = self.base.add(src);
-        ptr::copy(src, dst, len as usize);
-
-        Ok(())
     }
 
     /// Perform the `memory.fill` operation for the memory in an unsynchronized,
@@ -414,18 +416,20 @@ impl VMMemoryDefinition {
             .checked_add(len)
             .map_or(true, |m| m > self.current_length)
         {
-            return Err(Trap::lib(TrapCode::HeapAccessOutOfBounds));
+            log::debug!("memory_fill tried to access out of bounds destination memory at {:#X}-{:#X}, but data len is {:#X} (base_ptr={:#X})", dst, dst.checked_add(len).unwrap_or(0), self.current_length, self.base as usize);
+            Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
+        } else {
+
+            let dst = isize::try_from(dst).unwrap();
+            let val = val as u8;
+
+            // Bounds and casts are checked above, by this point we know that
+            // everything is safe.
+            let dst = self.base.offset(dst);
+            ptr::write_bytes(dst, val, len as usize);
+
+            Ok(())
         }
-
-        let dst = isize::try_from(dst).unwrap();
-        let val = val as u8;
-
-        // Bounds and casts are checked above, by this point we know that
-        // everything is safe.
-        let dst = self.base.offset(dst);
-        ptr::write_bytes(dst, val, len as usize);
-
-        Ok(())
     }
 }
 

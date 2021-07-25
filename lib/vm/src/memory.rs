@@ -464,7 +464,7 @@ impl Memory for LinearMemory {
         let vm_memory_definition = match self.vm_memory_definition {
             VMMemoryDefinitionOwnership::VMOwned(old_loc) => {
                 let md = unsafe{ mem_loc.as_mut() };
-                md.base = mmap.alloc.as_mut_ptr();
+                md.base = mmap.alloc.as_mut_ptr() as _;
                 md.current_length = unsafe{ old_loc.as_ref().current_length };
                 VMMemoryDefinitionOwnership::VMOwned(mem_loc)
             }

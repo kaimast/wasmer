@@ -820,23 +820,29 @@ impl Instance {
 
         if src
             .checked_add(len)
-            .map_or(true, |n| n as usize > data.len())
-            || dst
+            .map_or(true, |n| n as usize > data.len()) {
+            log::debug!("memory_init tried to access out of bounds source memory at {:#X}-{:#X}, but data len is {:#X}", src, src.checked_add(len).unwrap_or(0), data.len());
+            Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
+
+        } else if  dst
                 .checked_add(len)
                 .map_or(true, |m| m > memory.current_length)
         {
-            return Err(Trap::lib(TrapCode::HeapAccessOutOfBounds));
+            log::debug!("memory_init tried to access out of bounds destination memory at {:#X}-{:#X}, but data len is {:#X}", dst, dst.checked_add(len).unwrap_or(0), data.len());
+ 
+            Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
+        } else {
+
+            let src_slice = &data[src as usize..(src + len) as usize];
+
+            unsafe {
+                let dst_start = memory.base.add(dst as usize);
+                let dst_slice = slice::from_raw_parts_mut(dst_start, len as usize);
+                dst_slice.copy_from_slice(src_slice);
+            }
+
+            Ok(())
         }
-
-        let src_slice = &data[src as usize..(src + len) as usize];
-
-        unsafe {
-            let dst_start = memory.base.add(dst as usize);
-            let dst_slice = slice::from_raw_parts_mut(dst_start, len as usize);
-            dst_slice.copy_from_slice(src_slice);
-        }
-
-        Ok(())
     }
 
     /// Drop the given data segment, truncating its length to zero.
