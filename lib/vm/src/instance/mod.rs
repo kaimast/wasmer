@@ -1531,6 +1531,7 @@ fn initialize_memories(
             .checked_add(init.data.len())
             .map_or(true, |end| end > memory.current_length.try_into().unwrap())
         {
+            log::debug!("initialize_memories tried to access out of bounds memory at {:#X}-{:#X}, but data len is {:#X}", start, start.checked_add(init.data.len()).unwrap_or(0), memory.current_length);
             return Err(Trap::lib(TrapCode::HeapAccessOutOfBounds));
         }
 
