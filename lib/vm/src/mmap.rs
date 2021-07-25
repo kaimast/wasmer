@@ -98,7 +98,7 @@ impl Mmap {
             };
 
             let ptr = ptr as usize;
-            log::trace!("Memory mapped {} bytes to {:#X}", mapping_size, ptr);
+            log::trace!("Memory mapped {} bytes to {:#X}-{:#X}", mapping_size, ptr, ptr+mapping_size);
 
             if ptr as isize == -1_isize {
                 return Err(io::Error::last_os_error().to_string());
@@ -123,7 +123,7 @@ impl Mmap {
             };
 
             let ptr = ptr as usize;
-            log::trace!("Memory mapped {} bytes to {:#X}", mapping_size, ptr);
+            log::trace!("Memory mapped {} bytes to {:#X}-{:#X}", mapping_size, ptr, ptr+mapping_size);
 
             if ptr as isize == -1_isize {
                 return Err(io::Error::last_os_error().to_string());
@@ -190,7 +190,7 @@ impl Mmap {
             }
 
             let ptr = ptr as usize;
-            log::trace!("Memory mapped {} bytes to {:#X}", mapping_size, ptr);
+            log::trace!("Memory mapped {} bytes to {:#X}-{:#X}", mapping_size, ptr, ptr+mapping_size);
 
             Self {
                 ptr, len: mapping_size,
@@ -204,7 +204,7 @@ impl Mmap {
             }
 
             let ptr = ptr as usize;
-            log::trace!("Memory mapped {} bytes to {:#X}", mapping_size, ptr);
+            log::trace!("Memory mapped {} bytes to {:#X}-{:#X}", mapping_size, ptr, ptr+mapping_size);
 
             let mut result = Self {
                 ptr, len: mapping_size,
@@ -332,7 +332,7 @@ impl Drop for Mmap {
     #[cfg(not(target_os = "windows"))]
     fn drop(&mut self) {
         if self.len != 0 {
-            log::trace!("Memory unmapping {} bytes at {:#X}", self.len, self.ptr);
+            log::trace!("Memory unmapping {} bytes at {:#X}-{:#X}", self.len, self.ptr, self.ptr+self.len);
 
             let r = unsafe { libc::munmap(self.ptr as *mut libc::c_void, self.len) };
             assert_eq!(r, 0, "munmap failed: {}", io::Error::last_os_error());
@@ -347,7 +347,7 @@ impl Drop for Mmap {
     #[cfg(target_os = "windows")]
     fn drop(&mut self) {
         if self.len != 0 {
-            log::trace!("Memory unmapping {} bytes at {:#X}", self.len, self.ptr);
+            log::trace!("Memory unmapping {} bytes at {:#X}-{:#X}", self.len, self.ptr, self.ptr+self.len);
 
             use winapi::ctypes::c_void;
             use winapi::um::memoryapi::VirtualFree;
