@@ -130,8 +130,10 @@ cfg_if::cfg_if! {
                     // range [stackaddr - guard pages .. stackaddr + stacksize).
                     // We assume the guard page is 1 page, and pages are 4KiB (or 16KiB in Apple Silicon)
                     if stackaddr - region::page::size() <= addr && addr < stackaddr + stacksize {
+                        log::debug!("libc detected a stack overflow at {:#X} (stackaddr={:#X}, stacksize={:#X})", addr, stackaddr, stacksize);
                         Some(TrapCode::StackOverflow)
                     } else {
+                        log::debug!("libc detected an out-of-bounds heap access at {:#X}", addr);
                         Some(TrapCode::HeapAccessOutOfBounds)
                     }
                 }
