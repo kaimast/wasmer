@@ -59,6 +59,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "#,
     )?;
 
+    env_logger::init();
+
     let engine = Universal::new(LLVM::default()).engine();
     let mut tunables = wasmer::BaseTunables::for_target(engine.target());
     tunables.static_memory_bound = wasmer::Pages(0); // Always use dynamic memory

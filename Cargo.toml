@@ -73,6 +73,7 @@ compiler-test-derive = { path = "tests/lib/compiler-test-derive" }
 tempfile = "3.1"
 loupe = "0.1"
 smol = "1"
+env_logger = "0.9"
 async-wormhole = { git="https://github.com/lunatic-solutions/async-wormhole.git" }
 
 [features]

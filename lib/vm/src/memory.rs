@@ -278,6 +278,7 @@ impl LinearMemory {
 
         let base_ptr = mmap.alloc.as_mut_ptr();
         let mem_length = memory.minimum.bytes().0.try_into().unwrap();
+
         Ok(Self {
             mmap: Mutex::new(mmap),
             maximum: memory.maximum,
@@ -390,6 +391,10 @@ impl Memory for LinearMemory {
         let new_bytes = new_pages.bytes().0;
 
         if new_bytes > mmap.alloc.len() - self.offset_guard_size {
+            if mmap.alloc.is_zygote() {
+                panic!("Cannot grow Zygote memory more than size of memfd");
+            }
+
             // If the new size is within the declared maximum, but needs more memory than we
             // have on hand, it's a dynamic heap and it can move.
             let guard_bytes = self.offset_guard_size;
