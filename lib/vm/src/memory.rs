@@ -271,7 +271,7 @@ impl LinearMemory {
         let mapped_bytes = mapped_pages.bytes();
 
         let mut mmap = WasmMmap {
-            alloc: Mmap::accessible_reserved(mapped_bytes.0, request_bytes)
+            alloc: Mmap::accessible_reserved(mapped_bytes.0, request_bytes, None)
                 .map_err(MemoryError::Region)?,
             size: memory.minimum,
         };
@@ -391,10 +391,6 @@ impl Memory for LinearMemory {
         let new_bytes = new_pages.bytes().0;
 
         if new_bytes > mmap.alloc.len() - self.offset_guard_size {
-            if mmap.alloc.is_zygote() {
-                panic!("Cannot grow Zygote memory more than size of memfd");
-            }
-
             // If the new size is within the declared maximum, but needs more memory than we
             // have on hand, it's a dynamic heap and it can move.
             let guard_bytes = self.offset_guard_size;
@@ -406,13 +402,28 @@ impl Memory for LinearMemory {
                         attempted_delta: Bytes(guard_bytes).try_into().unwrap(),
                     })?;
 
-            let mut new_mmap =
-                Mmap::accessible_reserved(new_bytes, request_bytes).map_err(MemoryError::Region)?;
+            if mmap.alloc.is_zygote() {
+                // Temporary replace alloc with an empty mmap
+                let mut alloc = Mmap::new();
+                std::mem::swap(&mut mmap.alloc, &mut alloc);
 
-            let copy_len = mmap.alloc.len() - self.offset_guard_size;
-            new_mmap.as_mut_slice()[..copy_len].copy_from_slice(&mmap.alloc.as_slice()[..copy_len]);
+                let memfd = alloc.into_memfd().unwrap();
 
-            mmap.alloc = new_mmap;
+                // Create new mmap that uses the same underlying memfd
+                mmap.alloc = Mmap::accessible_reserved(new_bytes, request_bytes, Some(memfd))
+                    .map_err(MemoryError::Region)?;
+
+            } else {
+                //FIXME don't copy here
+
+                let mut new_mmap = Mmap::accessible_reserved(new_bytes, request_bytes, None)
+                    .map_err(MemoryError::Region)?;
+
+                let copy_len = mmap.alloc.len() - self.offset_guard_size;
+                new_mmap.as_mut_slice()[..copy_len].copy_from_slice(&mmap.alloc.as_slice()[..copy_len]);
+
+                mmap.alloc = new_mmap;
+            }
         } else if delta_bytes > 0 {
             // Make the newly allocated pages accessible.
             mmap.alloc

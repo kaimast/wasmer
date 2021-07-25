@@ -49,7 +49,7 @@ impl Mmap {
     pub fn with_at_least(size: usize) -> Result<Self, String> {
         let page_size = region::page::size();
         let rounded_size = round_up_to_page_size(size, page_size);
-        Self::accessible_reserved(rounded_size, rounded_size)
+        Self::accessible_reserved(rounded_size, rounded_size, None)
     }
 
     /// Create a new `Mmap` pointing to `accessible_size` bytes of page-aligned accessible memory,
@@ -59,6 +59,7 @@ impl Mmap {
     pub fn accessible_reserved(
         accessible_size: usize,
         mapping_size: usize,
+        memfd: Option<RawFd>,
     ) -> Result<Self, String> {
         let page_size = region::page::size();
         assert_le!(accessible_size, mapping_size);
@@ -71,10 +72,14 @@ impl Mmap {
             return Ok(Self::new());
         }
 
-        let label = std::ffi::CString::new("wasmer").unwrap();
-        let flags = nix::sys::memfd::MemFdCreateFlag::empty();
-        let memfd = nix::sys::memfd::memfd_create(&label, flags)
-                .expect("Failed to create memfd");
+        let memfd = if let Some(memfd) = memfd {
+            memfd
+        } else {
+            let label = std::ffi::CString::new("wasmer").unwrap();
+            let flags = nix::sys::memfd::MemFdCreateFlag::empty();
+            nix::sys::memfd::memfd_create(&label, flags)
+                    .expect("Failed to create memfd")
+        };
 
         nix::unistd::ftruncate(memfd, mapping_size as i64).expect("Failed to resize memfd");
         log::trace!("Created memfd {} of size {}", memfd, mapping_size);
@@ -141,6 +146,11 @@ impl Mmap {
     /// Can this Mmap be duplicated?
     pub fn is_zygote(&self) -> bool {
         self.memfd.is_some()
+    }
+
+    /// Destroy this mmap and return the underlying memfd (if any)
+    pub fn into_memfd(mut self) -> Option<RawFd> {
+        self.memfd.take()
     }
 
     /// Create a new `Mmap` pointing to `accessible_size` bytes of page-aligned accessible memory,
