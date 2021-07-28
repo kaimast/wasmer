@@ -480,11 +480,14 @@ impl Instance {
     where
         IntoPages: Into<Pages>,
     {
+        let delta = delta.into();
+        log::trace!("Got request to grow memory #{} by {} page(s)", memory_index.index(), delta.0);
+
         let mem = self
             .memories
             .get(memory_index)
             .unwrap_or_else(|| panic!("no memory for index {}", memory_index.index()));
-        mem.grow(delta.into())
+        mem.grow(delta)
     }
 
     /// Grow imported memory by the specified amount of pages.
@@ -879,12 +882,20 @@ impl Instance {
 
         let offsets = allocator.offsets().clone();
 
+        if memory_definition_locations.len() != self.memories.len() {
+            panic!("Memories are incompatible");
+        }
+
+        if table_definition_locations.len() != self.tables.len() {
+            panic!("Tables are incompatible");
+        }
+
         // duplicate tables
         // TODO make more efficient / use mmap
         let tables = {
             let mut tables = PrimaryMap::<LocalTableIndex, Arc<(dyn Table+'static)>>::new();
-            for (pos, (_, old_table)) in self.tables.iter().enumerate() {
-                let table_loc = table_definition_locations[pos];
+            for (index, old_table) in self.tables.iter() {
+                let table_loc = table_definition_locations[index.index()];
                 let table = LinearTable::from_definition(old_table.ty(), old_table.style(), table_loc).expect("Failed to create table");
 
                 for idx in 0..old_table.size() {
@@ -900,28 +911,30 @@ impl Instance {
         // duplicate memory
         let memories = {
             let mut memories = PrimaryMap::new();
-            for (pos, (_, memory)) in self.memories.iter().enumerate() {
-                let mem_loc = memory_definition_locations[pos];
-                let memory = memory.duplicate(mem_loc).expect("Failed to duplicate memory");
-                memories.push(memory);
+            for (index, memory) in self.memories.iter() {
+                let mem_loc = memory_definition_locations[index.index()];
+                let memcopy = memory.duplicate(mem_loc).expect("Failed to duplicate memory");
+                memories.push(memcopy);
             }
             memories.into_boxed_slice()
         };
 
         let mut instance_ref = {
+            // use dummy value to create an instance so we can get the vmctx pointer
+            let funcrefs = PrimaryMap::new().into_boxed_slice();
+
             // Create new copy of the instance
-            // FIXME also duplicate globals and tables
+            // FIXME also duplicate globals
             let instance = Instance {
                 module: self.module.clone(),
                 offsets: offsets.clone(),
-                memories, tables,
+                memories, tables, funcrefs,
                 globals: self.globals.clone(),
                 functions: self.functions.clone(),
                 function_call_trampolines: self.function_call_trampolines.clone(),
                 passive_elements: self.passive_elements.clone(),
                 passive_data: self.passive_data.clone(),
                 host_state: self.host_state.clone(),
-                funcrefs: self.funcrefs.clone(),
                 imported_function_envs: imports.get_imported_function_envs(),
                 vmctx: VMContext {},
             };
@@ -929,35 +942,37 @@ impl Instance {
             allocator.write_instance(instance)
         };
 
-        // Set the funcrefs after we've built the instance
+        let instance = instance_ref.as_mut().unwrap();
+
+        // Copy zygote state
         {
-            let instance = instance_ref.as_mut().unwrap();
-            let vmctx_ptr = instance.vmctx_ptr();
-            instance.funcrefs = build_funcrefs(
-                &*instance.module,
-                &imports,
-                &instance.functions,
-                func_data_registry,
-                &vmshared_signatures,
-                vmctx_ptr,
+            let vmctx_size = usize::try_from(offsets.size_of_vmctx())
+                .expect("Failed to convert the size of `vmctx` to a `usize`");
+
+            let src_ptr: *const VMContext = &self.vmctx;
+            let dst_ptr: *mut VMContext = &mut instance.vmctx;
+
+            ptr::copy(
+                src_ptr as *const u8,
+                dst_ptr as *mut u8,
+                vmctx_size,
             );
         }
 
-        let instance = instance_ref.as_mut().unwrap();
-        let vmctx_size = usize::try_from(offsets.size_of_vmctx())
-            .expect("Failed to convert the size of `vmctx` to a `usize`");
+        log::trace!("New vmcontext at {:#X}", instance.vmctx_ptr() as usize);
 
-        let src_ptr: *const VMContext = &self.vmctx;
-        let dst_ptr: *mut VMContext = &mut instance.vmctx;
-
-        // Copy zygote state
-        ptr::copy(
-            src_ptr as *const u8,
-            dst_ptr as *mut u8,
-            vmctx_size,
+        // Set the funcrefs after we've built the instance
+        let vmctx_ptr = instance.vmctx_ptr();
+        instance.funcrefs = build_funcrefs(
+            &*instance.module,
+            &imports,
+            &instance.functions,
+            func_data_registry,
+            &vmshared_signatures,
+            vmctx_ptr,
         );
 
-        // Overwrite imports
+       // Overwrite imports
         ptr::copy(
             imports.functions.values().as_slice().as_ptr(),
             instance.imported_functions_ptr() as *mut VMFunctionImport,
@@ -1060,10 +1075,10 @@ impl InstanceHandle {
             };
 
             let mut instance_ref = allocator.write_instance(instance);
+            let instance = instance_ref.as_mut().unwrap();
 
             // Set the funcrefs after we've built the instance
             {
-                let instance = instance_ref.as_mut().unwrap();
                 let vmctx_ptr = instance.vmctx_ptr();
                 instance.funcrefs = build_funcrefs(
                     &*instance.module,
@@ -1209,6 +1224,8 @@ impl InstanceHandle {
     pub fn lookup_by_declaration(&self, export: &ExportIndex) -> VMExtern {
         let instance = self.instance().clone();
         let instance_ref = instance.as_ref();
+
+        log::trace!("Exporting function with vmcontext at {:#X}", instance_ref.vmctx_ptr() as usize);
 
         match export {
             ExportIndex::Function(index) => {
@@ -1404,7 +1421,10 @@ impl InstanceHandle {
 
     /// Create an identical copy of this instance
     pub unsafe fn duplicate(&self, imports: Imports, vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>, func_data_registry: &FuncDataRegistry) -> Self {
-        Self{ instance: self.instance().as_ref().duplicate(imports, vmshared_signatures, func_data_registry) }
+        let iref = self.instance().as_ref();
+        let instance = iref.duplicate(imports, vmshared_signatures, func_data_registry);
+
+        Self{ instance }
     }
 }
 
@@ -1586,6 +1606,8 @@ fn build_funcrefs(
     vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
     vmctx_ptr: *mut VMContext,
 ) -> BoxedSlice<FunctionIndex, VMFuncRef> {
+    log::trace!("Buildings function references for vmcontext at {:#X}", vmctx_ptr as usize);
+
     let mut func_refs = PrimaryMap::with_capacity(module_info.functions.len());
 
     // do imported functions

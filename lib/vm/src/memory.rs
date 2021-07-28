@@ -129,10 +129,10 @@ pub trait Memory: fmt::Debug + Send + Sync + MemoryUsage {
 /// A linear memory instance.
 #[derive(Debug, MemoryUsage)]
 pub struct LinearMemory {
-    // The underlying allocation.
+    /// The underlying allocation.
     mmap: Mutex<WasmMmap>,
 
-    // The optional maximum size in wasm pages of this linear memory.
+    /// The optional maximum size in wasm pages of this linear memory.
     maximum: Option<Pages>,
 
     /// The WebAssembly linear memory description.
@@ -141,15 +141,15 @@ pub struct LinearMemory {
     /// Our chosen implementation style.
     style: MemoryStyle,
 
-    // Size in bytes of extra guard pages after the end to optimize loads and stores with
-    // constant offsets.
+    /// Size in bytes of extra guard pages after the end to optimize loads and stores with
+    /// constant offsets.
     offset_guard_size: usize,
 
     /// The owned memory definition used by the generated code
     vm_memory_definition: VMMemoryDefinitionOwnership,
 
-    // Records whether we're using a bounds-checking strategy which requires
-    // handlers to catch trapping accesses.
+    /// Records whether we're using a bounds-checking strategy which requires
+    /// handlers to catch trapping accesses.
     pub(crate) needs_signal_handlers: bool,
 }
 
@@ -403,6 +403,8 @@ impl Memory for LinearMemory {
                     })?;
 
             if mmap.alloc.is_zygote() {
+                log::trace!("Remapping zygote memory");
+
                 // Temporary replace alloc with an empty mmap
                 let mut alloc = Mmap::new();
                 std::mem::swap(&mut mmap.alloc, &mut alloc);

@@ -461,6 +461,10 @@ impl Function {
             }
         }
 
+        unsafe {
+            log::trace!("Calling function with trampoline vmctx at {:#X}", self.exported.vm_function.vmctx.vmctx as usize);
+        }
+
         // Call the trampoline.
         if let Err(error) = unsafe {
             wasmer_call_trampoline(

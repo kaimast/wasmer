@@ -31,6 +31,7 @@ async-wormhole = { git="https://github.com/lunatic-solutions/async-wormhole.git"
 target-lexicon = { version = "0.12", default-features = false }
 loupe = "0.1"
 tracing = "0.1"
+log = "0.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = "0.3"

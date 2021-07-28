@@ -157,6 +157,8 @@ pub unsafe extern "C" fn wasmer_vm_memory32_grow(
     let instance = (&*vmctx).instance();
     let memory_index = LocalMemoryIndex::from_u32(memory_index);
 
+    log::trace!("memory_grow called for vmcontext at {:#X}", vmctx as usize);
+
     instance
         .memory_grow(memory_index, delta)
         .map(|pages| pages.0)

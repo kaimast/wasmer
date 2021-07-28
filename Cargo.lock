@@ -2689,6 +2689,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "indexmap",
  "libc",
+ "log",
  "loupe",
  "more-asserts",
  "target-lexicon 0.12.0",

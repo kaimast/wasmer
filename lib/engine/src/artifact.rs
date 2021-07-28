@@ -35,7 +35,7 @@ pub trait Artifact: Send + Sync + Upcastable + MemoryUsage {
     /// Note: this will return `None` if the module is already instantiated.
     fn module_mut(&mut self) -> Option<&mut ModuleInfo>;
 
-    /// Register thie `Artifact` stack frame information into the global scope.
+    /// Register the `Artifact` stack frame information into the global scope.
     ///
     /// This is required to ensure that any traps can be properly symbolicated.
     fn register_frame_info(&self);
