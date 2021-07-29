@@ -639,6 +639,8 @@ pub unsafe extern "C" fn wasmer_vm_memory32_init(
     src: u32,
     len: u32,
 ) {
+    log::trace!("Initializing memory vmctx={:#X}", vmctx as usize);
+
     let result = {
         let memory_index = MemoryIndex::from_u32(memory_index);
         let data_index = DataIndex::from_u32(data_index);

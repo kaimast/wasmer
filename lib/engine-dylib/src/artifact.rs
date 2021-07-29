@@ -631,7 +631,7 @@ impl Artifact for DylibArtifact {
         let fp = self.finished_functions.clone();
         let mut function_pointers = fp.into_iter().collect::<Vec<_>>();
 
-        // Sort the keys by the funciton pointer values in reverse order.
+        // Sort the keys by the function pointer values in reverse order.
         // This way we can get the maximum function lengths (since functions can't overlap in memory)
         function_pointers.sort_by(|(_k1, v1), (_k2, v2)| v2.cmp(v1));
         let mut iter = function_pointers.into_iter();

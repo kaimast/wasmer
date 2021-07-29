@@ -919,21 +919,22 @@ impl Instance {
             memories.into_boxed_slice()
         };
 
+        // Globals are shared among all instances so no need to duplicate
+        let globals = self.globals.clone();
+
         let mut instance_ref = {
             // use dummy value to create an instance so we can get the vmctx pointer
             let funcrefs = PrimaryMap::new().into_boxed_slice();
 
             // Create new copy of the instance
-            // FIXME also duplicate globals
             let instance = Instance {
                 module: self.module.clone(),
                 offsets: offsets.clone(),
-                memories, tables, funcrefs,
-                globals: self.globals.clone(),
+                memories, tables, funcrefs, globals,
                 functions: self.functions.clone(),
                 function_call_trampolines: self.function_call_trampolines.clone(),
-                passive_elements: self.passive_elements.clone(),
-                passive_data: self.passive_data.clone(),
+                passive_elements: RefCell::new(self.passive_elements.borrow().clone()),
+                passive_data: RefCell::new(self.passive_data.borrow().clone()),
                 host_state: self.host_state.clone(),
                 imported_function_envs: imports.get_imported_function_envs(),
                 vmctx: VMContext {},
