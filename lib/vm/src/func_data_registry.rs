@@ -109,8 +109,10 @@ impl FuncDataRegistry {
             let inner_ptr: &VMCallerCheckedAnyfunc = &*data;
             VMFuncRef(inner_ptr)
         } else {
+            let ptr = Box::new(anyfunc.clone());
+
             let idx = inner.func_data.len();
-            inner.func_data.push(Box::new(anyfunc.clone()));
+            inner.func_data.push(ptr);
             inner.anyfunc_to_index.insert(anyfunc, idx);
 
             let data: &Box<_> = &inner.func_data[idx];

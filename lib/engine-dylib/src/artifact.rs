@@ -669,8 +669,7 @@ impl Artifact for DylibArtifact {
                 let first = (
                     index,
                     FunctionExtent {
-                        ptr: *ptr,
-                        length: length,
+                        ptr: *ptr, length,
                     },
                 );
                 std::iter::once(first)
@@ -693,8 +692,7 @@ impl Artifact for DylibArtifact {
                         (
                             index,
                             FunctionExtent {
-                                ptr: *ptr,
-                                length: length,
+                                ptr: *ptr, length,
                             },
                         )
                     }))

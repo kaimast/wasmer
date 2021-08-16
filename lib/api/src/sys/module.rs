@@ -273,7 +273,7 @@ impl Module {
             )?;
 
             // After the instance handle is created, we need to initialize
-            // the data, call the start function and so. However, if any
+            // the data, call the start function and so on. However, if any
             // of this steps traps, we still need to keep the instance alive
             // as some of the Instance elements may have placed in other
             // instance tables.

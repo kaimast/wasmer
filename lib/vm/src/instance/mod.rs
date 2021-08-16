@@ -136,6 +136,7 @@ pub enum ImportFunctionEnv {
         /// should be set to `None` after use to prevent double
         /// initialization.
         initializer: Option<ImportInitializerFuncPtr>,
+
         /// The destructor to clean up the type in `env`.
         ///
         /// # Safety
@@ -401,6 +402,7 @@ impl Instance {
     }
 
     /// Invoke the WebAssembly start function of the instance, if one is present.
+    #[allow(dead_code)]
     fn invoke_start_function(&self, trap_handler: &dyn TrapHandler) -> Result<(), Trap> {
         let start_index = match self.module.start_function {
             Some(idx) => idx,
@@ -558,6 +560,8 @@ impl Instance {
         delta: u32,
         init_value: TableElement,
     ) -> Option<u32> {
+        log::trace!("table_grow called");
+
         let result = self
             .tables
             .get(table_index)
@@ -577,6 +581,8 @@ impl Instance {
         delta: u32,
         init_value: TableElement,
     ) -> Option<u32> {
+        log::trace!("imported_table_grow called");
+
         let import = self.imported_table(table_index);
         let from = import.from.as_ref();
         from.grow(delta.into(), init_value)
@@ -588,6 +594,8 @@ impl Instance {
         table_index: LocalTableIndex,
         index: u32,
     ) -> Option<TableElement> {
+        log::trace!("table_get called");
+
         self.tables
             .get(table_index)
             .unwrap_or_else(|| panic!("no table for index {}", table_index.index()))
@@ -603,6 +611,8 @@ impl Instance {
         table_index: TableIndex,
         index: u32,
     ) -> Option<TableElement> {
+        log::trace!("imported_table_get called");
+
         let import = self.imported_table(table_index);
         let from = import.from.as_ref();
         from.get(index)
@@ -615,6 +625,8 @@ impl Instance {
         index: u32,
         val: TableElement,
     ) -> Result<(), Trap> {
+        log::trace!("table_set called");
+
         self.tables
             .get(table_index)
             .unwrap_or_else(|| panic!("no table for index {}", table_index.index()))
@@ -700,6 +712,8 @@ impl Instance {
         item: TableElement,
         len: u32,
     ) -> Result<(), Trap> {
+        log::trace!("Got table_fill");
+
         // https://webassembly.github.io/bulk-memory-operations/core/exec/instructions.html#exec-table-init
 
         let table = self.get_table(table_index);
@@ -745,7 +759,6 @@ impl Instance {
         len: u32,
     ) -> Result<(), Trap> {
         // https://webassembly.github.io/reference-types/core/exec/instructions.html#exec-memory-copy
-
         let memory = self.memory(memory_index);
         // The following memory copy is not synchronized and is not atomic:
         unsafe { memory.memory_copy(dst, src, len) }
@@ -876,9 +889,12 @@ impl Instance {
     }
 
     /// Create an identical copy of this instance
-    pub (crate) unsafe fn duplicate(&self, mut imports: Imports, vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>, func_data_registry: &FuncDataRegistry) -> InstanceRef {
+    /// This mirrors `Self::new` as much as possible
+    pub(crate) unsafe fn duplicate(&self, mut imports: Imports, vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>, func_data_registry: &FuncDataRegistry) -> InstanceRef {
         let (allocator, memory_definition_locations, table_definition_locations) =
             InstanceAllocator::new(&*self.module);
+
+        let passive_data = RefCell::new(self.module.passive_data.clone());
 
         let offsets = allocator.offsets().clone();
 
@@ -894,13 +910,18 @@ impl Instance {
         // TODO make more efficient / use mmap
         let tables = {
             let mut tables = PrimaryMap::<LocalTableIndex, Arc<(dyn Table+'static)>>::new();
-            for (index, old_table) in self.tables.iter() {
+            for (pos, (index, old_table)) in self.tables.iter().enumerate() {
+                assert_eq!(pos, index.index());
+
                 let table_loc = table_definition_locations[index.index()];
                 let table = LinearTable::from_definition(old_table.ty(), old_table.style(), table_loc).expect("Failed to create table");
 
+                // Note, most of this will be overwritten later by initialize_tables
                 for idx in 0..old_table.size() {
                     table.set(idx, old_table.get(idx).unwrap()).unwrap();
                 }
+
+                log::trace!("Cloned {} elements for table #{}", old_table.size(), index.index());
 
                 tables.push(Arc::new(table));
             }
@@ -911,16 +932,48 @@ impl Instance {
         // duplicate memory
         let memories = {
             let mut memories = PrimaryMap::new();
-            for (index, memory) in self.memories.iter() {
+            for (pos, (index, memory)) in self.memories.iter().enumerate() {
+                assert_eq!(pos, index.index());
+
                 let mem_loc = memory_definition_locations[index.index()];
                 let memcopy = memory.duplicate(mem_loc).expect("Failed to duplicate memory");
                 memories.push(memcopy);
             }
+
             memories.into_boxed_slice()
         };
 
-        // Globals are shared among all instances so no need to duplicate
-        let globals = self.globals.clone();
+        /* let memories = {
+            let mut memories = PrimaryMap::<LocalMemoryIndex, Arc<dyn Memory>>::new();
+            for (pos, (index, old_mem)) in self.memories.iter().enumerate() {
+                assert_eq!(pos, index.index());
+
+                let mem_loc = memory_definition_locations[index.index()];
+                let memory = crate::LinearMemory::from_definition(&old_mem.ty(), old_mem.style(), mem_loc).unwrap();
+
+                memories.push(Arc::new(memory));
+            }
+
+            memories.into_boxed_slice()
+        };*/
+
+        log::trace!("Cloned {} memories", memories.len());
+
+        let globals = {
+            let mut globals = PrimaryMap::new();
+            for (_index, old) in self.globals.iter() {
+                let global = Global::new(*old.ty());
+                globals.push(Arc::new(global));
+            }
+
+            globals.into_boxed_slice()
+        };
+
+        let vmctx_globals = globals
+            .values()
+            .map(|m| m.vmglobal())
+            .collect::<PrimaryMap<LocalGlobalIndex, _>>()
+            .into_boxed_slice();
 
         let mut instance_ref = {
             // use dummy value to create an instance so we can get the vmctx pointer
@@ -930,11 +983,10 @@ impl Instance {
             let instance = Instance {
                 module: self.module.clone(),
                 offsets: offsets.clone(),
-                memories, tables, funcrefs, globals,
+                memories, tables, funcrefs, globals, passive_data,
                 functions: self.functions.clone(),
                 function_call_trampolines: self.function_call_trampolines.clone(),
-                passive_elements: RefCell::new(self.passive_elements.borrow().clone()),
-                passive_data: RefCell::new(self.passive_data.borrow().clone()),
+                passive_elements: Default::default(),
                 host_state: self.host_state.clone(),
                 imported_function_envs: imports.get_imported_function_envs(),
                 vmctx: VMContext {},
@@ -943,27 +995,29 @@ impl Instance {
             allocator.write_instance(instance)
         };
 
+        // The new, duplicated instance
         let instance = instance_ref.as_mut().unwrap();
+        let parent_vmctx_ptr = self.vmctx_ptr();
+        let vmctx_ptr = instance.vmctx_ptr();
+
+        assert_ne!(vmctx_ptr, parent_vmctx_ptr);
 
         // Copy zygote state
-        {
+        /*{
             let vmctx_size = usize::try_from(offsets.size_of_vmctx())
                 .expect("Failed to convert the size of `vmctx` to a `usize`");
+            assert_eq!(self.offsets().size_of_vmctx() as usize, vmctx_size);
 
-            let src_ptr: *const VMContext = &self.vmctx;
             let dst_ptr: *mut VMContext = &mut instance.vmctx;
 
             ptr::copy(
-                src_ptr as *const u8,
+                parent_vmctx_ptr as *const u8,
                 dst_ptr as *mut u8,
                 vmctx_size,
             );
-        }
-
-        log::trace!("New vmcontext at {:#X}", instance.vmctx_ptr() as usize);
+        }*/
 
         // Set the funcrefs after we've built the instance
-        let vmctx_ptr = instance.vmctx_ptr();
         instance.funcrefs = build_funcrefs(
             &*instance.module,
             &imports,
@@ -973,7 +1027,11 @@ impl Instance {
             vmctx_ptr,
         );
 
-       // Overwrite imports
+        ptr::copy(
+            vmshared_signatures.values().as_slice().as_ptr(),
+            instance.signature_ids_ptr() as *mut VMSharedSignatureIndex,
+            vmshared_signatures.len(),
+        );
         ptr::copy(
             imports.functions.values().as_slice().as_ptr(),
             instance.imported_functions_ptr() as *mut VMFunctionImport,
@@ -994,6 +1052,30 @@ impl Instance {
             instance.imported_globals_ptr() as *mut VMGlobalImport,
             imports.globals.len(),
         );
+        // these should already be set, add asserts here? for:
+        // - instance.tables_ptr() as *mut VMTableDefinition
+        // - instance.memories_ptr() as *mut VMMemoryDefinition
+        ptr::copy(
+            vmctx_globals.values().as_slice().as_ptr(),
+            instance.globals_ptr() as *mut NonNull<VMGlobalDefinition>,
+            vmctx_globals.len(),
+        );
+        ptr::write(
+            instance.builtin_functions_ptr() as *mut VMBuiltinFunctionsArray,
+            VMBuiltinFunctionsArray::initialized(),
+        );
+
+        log::trace!("New vmcontext at {:#X} (duplicated from {:#X})", vmctx_ptr as usize, parent_vmctx_ptr as usize);
+
+        // Override globals
+        ptr::copy(
+            vmctx_globals.values().as_slice().as_ptr(),
+            instance.globals_ptr() as *mut NonNull<VMGlobalDefinition>,
+            vmctx_globals.len(),
+        );
+
+        initialize_passive_elements(instance);
+        initialize_globals(instance);
 
         instance_ref
     }
@@ -1081,6 +1163,8 @@ impl InstanceHandle {
             // Set the funcrefs after we've built the instance
             {
                 let vmctx_ptr = instance.vmctx_ptr();
+                log::trace!("New vmcontext at {:#X}", vmctx_ptr as usize);
+
                 instance.funcrefs = build_funcrefs(
                     &*instance.module,
                     &imports,
@@ -1156,7 +1240,7 @@ impl InstanceHandle {
     /// Only safe to call immediately after instantiation.
     pub unsafe fn finish_instantiation(
         &self,
-        trap_handler: &dyn TrapHandler,
+        _trap_handler: &dyn TrapHandler,
         data_initializers: &[DataInitializer<'_>],
     ) -> Result<(), Trap> {
         let instance = self.instance().as_ref();
@@ -1167,7 +1251,8 @@ impl InstanceHandle {
 
         // The WebAssembly spec specifies that the start function is
         // invoked automatically at instantiation time.
-        instance.invoke_start_function(trap_handler)?;
+        // TODO allow disabling this?
+        // instance.invoke_start_function(trap_handler)?;
         Ok(())
     }
 
@@ -1427,6 +1512,18 @@ impl InstanceHandle {
 
         Self{ instance }
     }
+
+    /// TODO
+    pub fn finish_duplication(&self,
+        _data_initializers: &[DataInitializer<'_>],
+    ) {
+        let iref = self.instance().as_ref();
+        let vmctx_ptr = iref.vmctx_ptr();
+
+        log::trace!("Finishing duplication for instance with vmctx {:#X}", vmctx_ptr as usize);
+        initialize_tables(iref).expect("init_tables");
+        //initialize_memories(iref, data_initializers).unwrap();
+    }
 }
 
 /// Compute the offset for a memory data initializer.
@@ -1483,10 +1580,10 @@ fn get_table_init_start(init: &TableInitializer, instance: &Instance) -> usize {
     start
 }
 
-/// Initialize the table memory from the provided initializers.
+/// Initialize the table memory from the provided initializers
+/// This will store all the instance's funcref values in the table
 fn initialize_tables(instance: &Instance) -> Result<(), Trap> {
-    let module = Arc::clone(&instance.module);
-    for init in &module.table_initializers {
+    for init in &instance.module.table_initializers {
         let start = get_table_init_start(init, instance);
         let table = instance.get_table(init.table_index);
 
@@ -1499,6 +1596,7 @@ fn initialize_tables(instance: &Instance) -> Result<(), Trap> {
 
         for (i, func_idx) in init.elements.iter().enumerate() {
             let anyfunc = instance.get_vm_funcref(*func_idx);
+
             table
                 .set(
                     u32::try_from(start + i).unwrap(),
@@ -1506,6 +1604,8 @@ fn initialize_tables(instance: &Instance) -> Result<(), Trap> {
                 )
                 .unwrap();
         }
+
+        log::trace!("Initialized {} funcrefs in table", init.elements.len());
     }
 
     Ok(())
@@ -1589,12 +1689,14 @@ fn initialize_globals(instance: &Instance) {
                 }
                 GlobalInit::RefNullConst => *(*to).as_funcref_mut() = VMFuncRef::null(),
                 GlobalInit::RefFunc(func_idx) => {
+                    log::trace!("Setting global {} to funcref", index.index());
                     let funcref = instance.func_ref(*func_idx).unwrap();
                     *(*to).as_funcref_mut() = funcref;
                 }
             }
         }
     }
+    log::trace!("Initialized {} globals", module.global_initializers.len());
 }
 
 /// Eagerly builds all the `VMFuncRef`s for imported and local functions so that all

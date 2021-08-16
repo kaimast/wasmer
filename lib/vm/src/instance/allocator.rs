@@ -194,7 +194,7 @@ impl InstanceAllocator {
 
         unsafe {
             // `instance` is moved at `Self.instance_ptr`. This
-            // pointer has been allocated by `Self::allocate_instance`
+            // pointer has been allocated by `Self::new`
             // (so by `InstanceRef::allocate_instance`).
             ptr::write(self.instance_ptr.as_ptr(), instance);
             // Now `instance_ptr` is correctly initialized!

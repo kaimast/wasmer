@@ -157,7 +157,8 @@ impl Instance {
         &self.module
     }
 
-    ///TODO
+    /// Call a function on a dedicated stack
+    /// This allows for async host functions, but may create more overhead
     #[cfg(feature = "async")]
     pub async fn call_with_stack<Stack: async_wormhole::stack::Stack + Unpin>(
         &self,
@@ -225,14 +226,19 @@ impl Instance {
     /// Duplicate the entire state of this instance and create a new one
     #[ tracing::instrument(skip(resolver)) ]
     pub unsafe fn duplicate(&self, resolver: &dyn Resolver) -> Result<Self, InstantiationError> {
-        let handle = self.handle.lock().unwrap();
         let artifact = self.module().artifact();
-        let module = self.module();
+        let module = self.module().clone();
 
-        //FIXME we only need to update the Envs. do we really need to redo all of this?
-        let imports = wasmer_engine::resolve_imports(module.info(), resolver, artifact.finished_dynamic_function_trampolines(), artifact.memory_styles(), artifact.table_styles()).unwrap();
+        let instance_handle = {
+            let old_handle = self.handle.lock().unwrap();
+            //FIXME we only need to update the Envs. Do we really need to redo all of this?
+            let imports = wasmer_engine::resolve_imports(module.info(),
+                resolver, artifact.finished_dynamic_function_trampolines(),
+                artifact.memory_styles(), artifact.table_styles()
+            ).unwrap();
 
-        let instance_handle = handle.duplicate(imports, artifact.signatures(), artifact.func_data_registry());
+            old_handle.duplicate(imports, artifact.signatures(), artifact.func_data_registry())
+        };
 
         let exports = self.module()
             .exports()
@@ -246,13 +252,24 @@ impl Instance {
 
         let instance = Self {
             handle: Arc::new(Mutex::new(instance_handle)),
-            module: self.module.clone(), exports,
+            module, exports,
         };
 
-        instance
-            .handle
-            .lock().unwrap()
-            .initialize_host_envs::<HostEnvInitError>(&instance as *const _ as *const _)?;
+        {
+            let mut hdl = instance.handle.lock().unwrap();
+            hdl.initialize_host_envs::<HostEnvInitError>(&instance as *const _ as *const _)?;
+
+            let data_initializers = artifact
+                .data_initializers()
+                .iter()
+                .map(|init| wasmer_types::DataInitializer {
+                    location: init.location.clone(),
+                    data: &*init.data,
+                })
+                .collect::<Vec<_>>();
+
+            hdl.finish_duplication(&data_initializers);
+        }
 
         Ok(instance)
     }

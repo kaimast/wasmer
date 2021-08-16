@@ -43,6 +43,7 @@ impl InstanceInner {
     /// dropped and deallocated.
     unsafe fn deallocate_instance(&mut self) {
         let instance_ptr = self.instance.as_ptr();
+        log::trace!("Deallocating instance at {:#X}", instance_ptr as usize);
 
         ptr::drop_in_place(instance_ptr);
         std::alloc::dealloc(instance_ptr as *mut u8, self.instance_layout);
