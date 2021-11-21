@@ -44,14 +44,10 @@ thiserror = "1.0"
 more-asserts = "0.2"
 #async-wormhole = { version="0.3", optional=true }
 async-wormhole = { git="https://github.com/lunatic-solutions/async-wormhole.git", optional=true }
-target-lexicon = { version = "0.12", default-features = false }
 loupe = "0.1"
 tracing = "0.1"
 log = "0.4"
-
-[target.'cfg(target_os = "windows")'.dependencies]
-target-lexicon = { version = "0.12", default-features = false }
-loupe = "0.1"
+target-lexicon = { version = "0.12.2", default-features = false }
 # - Optional dependencies for `sys`.
 wasmer-compiler-singlepass = { path = "../compiler-singlepass", version = "2.0.0", optional = true }
 wasmer-compiler-cranelift = { path = "../compiler-cranelift", version = "2.0.0", optional = true }
@@ -76,7 +72,7 @@ js-sys = "0.3.51"
 wasmer-derive = { path = "../derive", version = "2.0.0" }
 # - Optional dependencies for `js`.
 wasmparser = { version = "0.78", default-features = false, optional = true }
-hashbrown = { version = "0.9", optional = true }
+hashbrown = { version = "0.11", optional = true }
 # - Development Dependencies for `js`.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wat = "1.0"
@@ -174,3 +170,6 @@ js = []
 js-default = ["js", "std", "wasm-types-polyfill"]
 
 wasm-types-polyfill = ["js", "wasmparser"]
+
+[package.metadata.docs.rs]
+features = ["compiler", "core", "cranelift", "default-compiler", "default-dylib", "default-engine", "dylib", "engine", "jit", "llvm", "native", "singlepass", "sys", "sys-default", "universal"]

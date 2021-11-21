@@ -131,7 +131,7 @@ impl Memory {
     pub fn data_size(&self) -> u64 {
         let definition = self.vm_memory.from.vmmemory();
         let def = unsafe { definition.as_ref() };
-        def.current_length.into()
+        def.current_length.try_into().unwrap()
     }
 
     /// Returns the size (in [`Pages`]) of the `Memory`.
@@ -224,6 +224,14 @@ impl Memory {
         let length = self.size().bytes().0 / std::mem::size_of::<T>();
 
         unsafe { MemoryView::new(base as _, length as u32) }
+    }
+
+    /// A shortcut to [`Self::view::<u8>`][self::view].
+    ///
+    /// This code is going to be refactored. Use it as your own risks.
+    #[doc(hidden)]
+    pub fn uint8view(&self) -> MemoryView<u8> {
+        self.view()
     }
 
     pub(crate) fn from_vm_export(store: &Store, vm_memory: VMMemory) -> Self {

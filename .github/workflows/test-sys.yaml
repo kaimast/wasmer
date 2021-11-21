@@ -1,4 +1,4 @@
-name: core tests
+name: Runtime tests
 
 env:
   RUST_BACKTRACE: 1
@@ -12,6 +12,7 @@ on:
     tags:
       # this is _not_ a regex, see: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
       - '[0-9]+.[0-9]+.[0-9]+*'
+  pull_request:
 jobs:
   setup:
     name: Set up
@@ -41,7 +42,7 @@ jobs:
         include:
           - build: linux-x64
             os: ubuntu-18.04
-            llvm_url: 'https://github.com/wasmerio/llvm-custom-builds/releases/download/11.x/linux-amd64.tar.gz'
+            llvm_url: 'https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.0/clang+llvm-13.0.0-x86_64-linux-gnu-ubuntu-16.04.tar.xz'
             artifact_name: 'wasmer-linux-amd64'
             cross_compilation_artifact_name: 'cross_compiled_from_linux'
             run_test: true
@@ -49,14 +50,15 @@ jobs:
             run_integration_tests: true
             use_sccache: true
           - build: macos-x64
-            os: macos-latest
-            llvm_url: 'https://github.com/wasmerio/llvm-custom-builds/releases/download/11.x/darwin-amd64.tar.gz'
+            os: macos-11
+            llvm_url: 'https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.0/clang+llvm-13.0.0-x86_64-apple-darwin.tar.xz'
             artifact_name: 'wasmer-darwin-amd64'
             cross_compilation_artifact_name: 'cross_compiled_from_mac'
             run_test: true
             run_test_capi: true
             use_sccache: true
             run_integration_tests: true
+            run_ios_tests: true
           - build: macos-arm64
             os: macos-11.0
             target: aarch64-apple-darwin
@@ -66,8 +68,8 @@ jobs:
             run_test_capi: false
           - build: windows-x64
             os: windows-latest
-            # llvm_url: 'https://github.com/wasmerio/llvm-custom-builds/releases/download/11.x/windows-amd64.tar.gz'
-            llvm_choco_version: 11.1.0
+            # llvm_url: 'https://github.com/wasmerio/llvm-custom-builds/releases/download/12.x/windows-amd64.tar.gz'
+            llvm_choco_version: 13.0.0
             artifact_name: 'wasmer-windows-amd64'
             cross_compilation_artifact_name: 'cross_compiled_from_win'
             run_integration_tests: true
@@ -78,7 +80,7 @@ jobs:
           #  os: [self-hosted, linux, ARM64]
           #  random_sccache_port: true
           #  use_sccache: true
-          #  llvm_url: 'https://github.com/wasmerio/llvm-custom-builds/releases/download/11.x/linux-aarch64.tar.gz'
+          #  llvm_url: 'https://github.com/wasmerio/llvm-custom-builds/releases/download/12.x/linux-aarch64.tar.gz'
           #  artifact_name: 'wasmer-linux-aarch64'
           #  run_integration_tests: false
           - build: linux-musl-x64
@@ -91,7 +93,6 @@ jobs:
             use_sccache: false
     container: ${{ matrix.container }}
     env:
-      CARGO_SCCACHE_VERSION: 0.2.14-alpha.0-parity
       SCCACHE_AZURE_BLOB_CONTAINER: wasmerstoragesccacheblob
       SCCACHE_AZURE_CONNECTION_STRING: ${{ secrets.SCCACHE_AZURE_CONNECTION_STRING }}
       TARGET: ${{ matrix.target }}
@@ -118,10 +119,10 @@ jobs:
         if: matrix.llvm_choco_version
         shell: bash
         run: |
-          choco install llvm --version ${{ matrix.llvm_choco_version }}
+          choco install llvm --version ${{ matrix.llvm_choco_version }} --allow-downgrade
           cd 'C:\Program Files\LLVM\'
           LLVM_DIR=$(pwd)
-          echo "LLVM_SYS_110_PREFIX=${LLVM_DIR}" >> $GITHUB_ENV
+          echo "LLVM_SYS_120_PREFIX=${LLVM_DIR}" >> $GITHUB_ENV
       - name: Install LLVM (macOS Apple Silicon)
         if: matrix.os == 'macos-11.0' && !matrix.llvm_url
         run: |
@@ -130,12 +131,12 @@ jobs:
         if: matrix.llvm_url
         shell: bash
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf ${{ matrix.llvm_url }} -L -o llvm.tar.gz
+          curl --proto '=https' --tlsv1.2 -sSf ${{ matrix.llvm_url }} -L -o llvm.tar.xz
           LLVM_DIR=$(pwd)/${{ env.LLVM_DIR }}
           mkdir ${LLVM_DIR}
-          tar xf llvm.tar.gz --strip-components=1 -C ${LLVM_DIR}
+          tar xf llvm.tar.xz --strip-components=1 -C ${LLVM_DIR}
           echo "${LLVM_DIR}/bin" >> $GITHUB_PATH
-          echo "LLVM_SYS_110_PREFIX=${LLVM_DIR}" >> $GITHUB_ENV
+          echo "LLVM_SYS_120_PREFIX=${LLVM_DIR}" >> $GITHUB_ENV
         env:
           LLVM_DIR: .llvm
       - name: Set up dependencies for Mac OS
@@ -160,7 +161,7 @@ jobs:
         if: matrix.use_sccache
         run: |
           if [ ! -f '${{ runner.tool_cache }}/cargo-sccache/bin/sccache' ]; then
-            cargo install sccache --git https://github.com/wasmerio/sccache.git --no-default-features --features=dist-client,azure --root '${{ runner.tool_cache }}/cargo-sccache'
+            cargo install sccache --no-default-features --features=dist-client,azure --root '${{ runner.tool_cache }}/cargo-sccache'
           fi
         shell: bash
       - name: Setup Rust target
@@ -255,6 +256,12 @@ jobs:
           export WASMER_DIR=`pwd`/package
           make test-integration
         if: matrix.run_integration_tests && matrix.os != 'windows-latest'
+      - name: Run iOS integration tests
+        run: |
+          rustup target add aarch64-apple-ios x86_64-apple-ios
+          cargo install cargo-lipo
+          make test-integration-ios
+        if: matrix.run_ios_tests
       - name: Cross compile from Linux
         if: matrix.build == 'linux-x64'
         shell: bash
@@ -268,7 +275,7 @@ jobs:
           #cp qjs_win_from_linux.wjit cross
           cp target/release/wasmer cross
       - name: Cross compile from Mac
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-11'
         shell: bash
         run: |
           ls target/release
@@ -323,7 +330,7 @@ jobs:
   test-cross-compile-on-mac:
     name: Test cross-compile on macos
     needs: [setup, test]
-    runs-on: macos-latest
+    runs-on: macos-11
     steps:
       - name: Download Wasmer
         uses: actions/download-artifact@v2

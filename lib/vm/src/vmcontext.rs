@@ -13,7 +13,7 @@ use crate::trap::{Trap, TrapCode};
 use crate::VMExternRef;
 use loupe::{MemoryUsage, MemoryUsageTracker, POINTER_BYTE_SIZE};
 use std::any::Any;
-use std::convert::TryFrom;
+use std::convert::{TryFrom,TryInto};
 use std::fmt;
 use std::mem;
 use std::ptr::{self, NonNull};
@@ -345,7 +345,7 @@ pub struct VMMemoryDefinition {
     pub base: *mut u8,
 
     /// The current logical size of this linear memory in bytes.
-    pub current_length: u32,
+    pub current_length: usize,
 }
 
 /// # Safety
@@ -362,7 +362,7 @@ unsafe impl Sync for VMMemoryDefinition {}
 impl MemoryUsage for VMMemoryDefinition {
     fn size_of_val(&self, tracker: &mut dyn MemoryUsageTracker) -> usize {
         if tracker.track(self.base as *const _ as *const ()) {
-            POINTER_BYTE_SIZE * (self.current_length as usize)
+            POINTER_BYTE_SIZE * self.current_length
         } else {
             0
         }
@@ -384,12 +384,12 @@ impl VMMemoryDefinition {
         // https://webassembly.github.io/reference-types/core/exec/instructions.html#exec-memory-copy
         if src
             .checked_add(len)
-            .map_or(true, |n| n > self.current_length) {
+            .map_or(true, |n| n > self.current_length.try_into().unwrap()) {
             log::debug!("memory_copy tried to access out of bounds source memory at {:#X}-{:#X}, but data len is {:#X} (base_ptr={:#X})", src, src.checked_add(len).unwrap_or(0), self.current_length, self.base as usize);
             Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
         } else if  dst
                 .checked_add(len)
-                .map_or(true, |m| m > self.current_length) {
+                .map_or(true, |m| m > self.current_length.try_into().unwrap()) {
             log::debug!("memory_copy tried to access out of bounds destination memory at {:#X}-{:#X}, but data len is {:#X} (base_ptr={:#X})", dst, dst.checked_add(len).unwrap_or(0), self.current_length, self.base as usize);
             Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
         } else {
@@ -419,7 +419,7 @@ impl VMMemoryDefinition {
     pub(crate) unsafe fn memory_fill(&self, dst: u32, val: u32, len: u32) -> Result<(), Trap> {
         if dst
             .checked_add(len)
-            .map_or(true, |m| m > self.current_length)
+            .map_or(true, |m| usize::try_from(m).unwrap() > self.current_length)
         {
             log::debug!("memory_fill tried to access out of bounds destination memory at {:#X}-{:#X}, but data len is {:#X} (base_ptr={:#X})", dst, dst.checked_add(len).unwrap_or(0), self.current_length, self.base as usize);
             Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
@@ -462,12 +462,6 @@ mod test_vmmemory_definition {
             offset_of!(VMMemoryDefinition, current_length),
             usize::from(offsets.vmmemory_definition_current_length())
         );
-        /* TODO: Assert that the size of `current_length` matches.
-        assert_eq!(
-            size_of::<VMMemoryDefinition::current_length>(),
-            usize::from(offsets.size_of_vmmemory_definition_current_length())
-        );
-        */
     }
 }
 

@@ -29,7 +29,8 @@ _lightweight containers_ to run anywhere: from *Desktop* to the *Cloud*, *Edge* 
 [🇩🇪 Deutsch-German](https://github.com/wasmerio/wasmer/blob/master/docs/de/README.md) • 
 [🇪🇸 Español-Spanish](https://github.com/wasmerio/wasmer/blob/master/docs/es/README.md) • 
 [🇫🇷 Français-French](https://github.com/wasmerio/wasmer/blob/master/docs/fr/README.md) • 
-[🇯🇵 日本 語 -Japanese](https://github.com/wasmerio/wasmer/blob/master/docs/ja/README.md)_.
+[🇯🇵 日本 語 -Japanese](https://github.com/wasmerio/wasmer/blob/master/docs/ja/README.md) • 
+[🇰🇷 한국인 -Korean](https://github.com/wasmerio/wasmer/blob/master/docs/ko/README.md)_.
 
 ### Features
 
@@ -134,18 +135,19 @@ languages**, so you can use WebAssembly _anywhere_.
 |  | [**Swift**][Swift integration] | *no published package* | |
 | ![Zig logo] | [**Zig**][Zig integration] | *no published package* | |
 | ![Dart logo] | [**Dart**][Dart integration] | [`wasm` pub package] | |
+|  | [**Lisp**][Lisp integration] | *under heavy development - no published package* | |
 
 [👋&nbsp;&nbsp;Missing a language?](https://github.com/wasmerio/wasmer/issues/new?assignees=&labels=%F0%9F%8E%89+enhancement&template=---feature-request.md&title=)
 
 [rust logo]: https://raw.githubusercontent.com/wasmerio/wasmer/master/assets/languages/rust.svg
 [rust integration]: https://github.com/wasmerio/wasmer/tree/master/lib/api
 [`wasmer` rust crate]: https://crates.io/crates/wasmer/
-[rust docs]: https://wasmerio.github.io/wasmer/crates/wasmer
+[rust docs]: https://docs.rs/wasmer/
 
 [c logo]: https://raw.githubusercontent.com/wasmerio/wasmer/master/assets/languages/c.svg
 [c integration]: https://github.com/wasmerio/wasmer/tree/master/lib/c-api
 [`wasmer.h` header]: https://github.com/wasmerio/wasmer/blob/master/lib/c-api/wasmer.h
-[c docs]: https://wasmerio.github.io/wasmer/crates/wasmer_c_api
+[c docs]: https://docs.rs/wasmer-c-api/*/wasmer_c_api/wasm_c_api/index.html
 
 [c# logo]: https://raw.githubusercontent.com/wasmerio/wasmer/master/assets/languages/csharp.svg
 [c# integration]: https://github.com/migueldeicaza/WasmerSharp
@@ -170,7 +172,7 @@ languages**, so you can use WebAssembly _anywhere_.
 [php logo]: https://raw.githubusercontent.com/wasmerio/wasmer/master/assets/languages/php.svg
 [php integration]: https://github.com/wasmerio/wasmer-php
 [`wasm` pecl package]: https://pecl.php.net/package/wasm
-[php docs]: https://wasmerio.github.io/wasmer-php/wasm/
+[php docs]: https://wasmerio.github.io/wasmer-php/
 
 [js logo]: https://raw.githubusercontent.com/wasmerio/wasmer/master/assets/languages/js.svg
 [js integration]: https://github.com/wasmerio/wasmer-js
@@ -208,6 +210,8 @@ languages**, so you can use WebAssembly _anywhere_.
 [dart logo]: https://raw.githubusercontent.com/wasmerio/wasmer/master/assets/languages/dart.svg
 [dart integration]: https://github.com/dart-lang/wasm
 [`wasm` pub package]: https://pub.dev/packages/wasm
+
+[lisp integration]: https://github.com/helmutkian/cl-wasm-runtime
 
 ## Contribute
 

@@ -842,7 +842,7 @@ impl Instance {
 
         } else if  dst
                 .checked_add(len)
-                .map_or(true, |m| m > memory.current_length)
+                .map_or(true, |m| m > memory.current_length.try_into().unwrap())
         {
             log::debug!("memory_init tried to access out of bounds destination memory at {:#X}-{:#X}, but data len is {:#X}", dst, dst.checked_add(len).unwrap_or(0), data.len());
  
