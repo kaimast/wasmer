@@ -63,7 +63,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let instance = Instance::new(&module, &import_object)?;
     let stack = EightMbStack::new()?;
 
-    let result = smol::block_on(async move { instance.call_with_stack("call_func", stack).await })?;
+    let result = smol::block_on(async move {
+        let args: Vec<i32> = vec![];
+        instance.call_with_stack("call_func", stack, args).await
+    })?;
 
     let result = result[0].unwrap_i32();
     println!("Results of `call_func`: {:?}", result);

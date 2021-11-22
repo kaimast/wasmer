@@ -163,12 +163,14 @@ impl Instance {
     /// Call a function on a dedicated stack
     /// This allows for async host functions, but may create more overhead
     #[cfg(feature = "async")]
-    pub async fn call_with_stack<Stack: async_wormhole::stack::Stack + Unpin>(
+    pub async fn call_with_stack<V: Into<crate::Val>+Sized+Send, Stack: async_wormhole::stack::Stack + Unpin>(
         &self,
         func_name: &str,
         stack: Stack,
-        //FIXME support passing arguments params: &[Val]
+        mut params: Vec<V>,
     ) -> Result<Box<[crate::Val]>, RuntimeError> {
+        use std::iter::FromIterator;
+
         let mut task = async_wormhole::AsyncWormhole::new(
             stack,
             |yielder| -> Result<Box<[crate::Val]>, RuntimeError> {
@@ -183,8 +185,8 @@ impl Instance {
                     hdl.set_yielder(yielder_ptr);
                 }
 
-                let params = &[];
-                func.call(params)
+                let params = Vec::from_iter(params.drain(..).map(|p| p.into()));
+                func.call(&params)
             },
         )
         .expect("Failed to create async function call");
