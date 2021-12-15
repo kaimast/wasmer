@@ -2,18 +2,19 @@
 // Allow unused imports while developing.
 #![allow(unused_imports, dead_code)]
 
-use crate::codegen_x64::{
-    gen_import_call_trampoline, gen_std_dynamic_import_trampoline, gen_std_trampoline,
-    CodegenError, FuncGen,
-};
+use crate::codegen::FuncGen;
 use crate::config::Singlepass;
+use crate::machine::{
+    gen_import_call_trampoline, gen_std_dynamic_import_trampoline, gen_std_trampoline, CodegenError,
+};
+use crate::machine_x64::MachineX86_64;
 use loupe::MemoryUsage;
 #[cfg(feature = "rayon")]
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use std::sync::Arc;
 use wasmer_compiler::{
     Architecture, CallingConvention, Compilation, CompileError, CompileModuleInfo,
-    CompiledFunction, Compiler, CompilerConfig, FunctionBinaryReader, FunctionBody,
+    CompiledFunction, Compiler, CompilerConfig, CpuFeature, FunctionBinaryReader, FunctionBody,
     FunctionBodyData, MiddlewareBinaryReader, ModuleMiddleware, ModuleMiddlewareChain,
     ModuleTranslationState, OperatingSystem, SectionIndex, Target, TrapInformation,
 };
@@ -62,8 +63,15 @@ impl Compiler for SinglepassCompiler {
                 OperatingSystem::Windows.to_string(),
             ));
         }*/
-        if let Architecture::X86_32(arch) = target.triple().architecture {
-            return Err(CompileError::UnsupportedTarget(arch.to_string()));
+        if target.triple().architecture != Architecture::X86_64 {
+            return Err(CompileError::UnsupportedTarget(
+                target.triple().architecture.to_string(),
+            ));
+        }
+        if !target.cpu_features().contains(CpuFeature::AVX) {
+            return Err(CompileError::UnsupportedTarget(
+                "x86_64 without AVX".to_string(),
+            ));
         }
         if compile_info.features.multi_value {
             return Err(CompileError::UnsupportedFeature("multivalue".to_string()));
@@ -88,6 +96,7 @@ impl Compiler for SinglepassCompiler {
                     &vmoffsets,
                     i,
                     &module.signatures[module.functions[i]],
+                    target,
                     calling_convention,
                 )
             })
@@ -117,6 +126,10 @@ impl Compiler for SinglepassCompiler {
                     }
                 }
 
+                let machine = match target.triple().architecture {
+                    Architecture::X86_64 => MachineX86_64::new(),
+                    _ => unimplemented!(),
+                };
                 let mut generator = FuncGen::new(
                     module,
                     &self.config,
@@ -125,6 +138,8 @@ impl Compiler for SinglepassCompiler {
                     &table_styles,
                     i,
                     &locals,
+                    machine,
+                    calling_convention,
                 )
                 .map_err(to_compile_error)?;
 
@@ -145,7 +160,7 @@ impl Compiler for SinglepassCompiler {
             .values()
             .collect::<Vec<_>>()
             .into_par_iter_if_rayon()
-            .map(|func_type| gen_std_trampoline(&func_type, calling_convention))
+            .map(|func_type| gen_std_trampoline(&func_type, target, calling_convention))
             .collect::<Vec<_>>()
             .into_iter()
             .collect::<PrimaryMap<_, _>>();
@@ -155,7 +170,12 @@ impl Compiler for SinglepassCompiler {
             .collect::<Vec<_>>()
             .into_par_iter_if_rayon()
             .map(|func_type| {
-                gen_std_dynamic_import_trampoline(&vmoffsets, &func_type, calling_convention)
+                gen_std_dynamic_import_trampoline(
+                    &vmoffsets,
+                    &func_type,
+                    target,
+                    calling_convention,
+                )
             })
             .collect::<Vec<_>>()
             .into_iter()
