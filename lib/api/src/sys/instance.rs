@@ -248,7 +248,7 @@ impl Instance {
                 artifact.memory_styles(), artifact.table_styles()
             ).unwrap();
 
-            old_handle.duplicate(imports, artifact.signatures(), artifact.func_data_registry())
+            old_handle.duplicate(imports, artifact.signatures())
         };
 
         let exports = self.module()

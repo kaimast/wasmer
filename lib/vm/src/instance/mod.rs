@@ -892,7 +892,7 @@ impl Instance {
 
     /// Create an identical copy of this instance
     /// This mirrors `Self::new` as much as possible
-    pub(crate) unsafe fn duplicate(&self, mut imports: Imports, vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>, func_data_registry: &FuncDataRegistry) -> InstanceRef {
+    pub(crate) unsafe fn duplicate(&self, mut imports: Imports, vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>) -> InstanceRef {
         let (allocator, memory_definition_locations, table_definition_locations) =
             InstanceAllocator::new(&*self.module);
 
@@ -1024,7 +1024,6 @@ impl Instance {
             &*instance.module,
             &imports,
             &instance.functions,
-            func_data_registry,
             &vmshared_signatures,
             vmctx_ptr,
         );
@@ -1506,9 +1505,9 @@ impl InstanceHandle {
     }
 
     /// Create an identical copy of this instance
-    pub unsafe fn duplicate(&self, imports: Imports, vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>, func_data_registry: &FuncDataRegistry) -> Self {
+    pub unsafe fn duplicate(&self, imports: Imports, vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>) -> Self {
         let iref = self.instance().as_ref();
-        let instance = iref.duplicate(imports, vmshared_signatures, func_data_registry);
+        let instance = iref.duplicate(imports, vmshared_signatures);
 
         Self{ instance }
     }
@@ -1707,13 +1706,9 @@ fn build_funcrefs(
     finished_functions: &BoxedSlice<LocalFunctionIndex, FunctionBodyPtr>,
     vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
     vmctx_ptr: *mut VMContext,
-<<<<<<< HEAD
-) -> BoxedSlice<FunctionIndex, VMFuncRef> {
+) -> BoxedSlice<FunctionIndex, VMCallerCheckedAnyfunc> {
     log::trace!("Buildings function references for vmcontext at {:#X}", vmctx_ptr as usize);
 
-=======
-) -> BoxedSlice<FunctionIndex, VMCallerCheckedAnyfunc> {
->>>>>>> vanilla/master
     let mut func_refs = PrimaryMap::with_capacity(module_info.functions.len());
 
     // do imported functions
