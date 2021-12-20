@@ -28,32 +28,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
           (type $my_func_t(func (result i32)))
           (func $my_func_f (type $my_func_t) (result i32)
+              (i32.const 16)
 
-          i32.const 16
+              (if (result i32) (i32.eq (call $host_function) (i32.const 0))
+                  (then
+                      ;; Copy 'hi' to memory 0
+                      (memory.init 0
+                            (i32.const 16)    ;; target offset
+                            (i32.const 0)     ;; source offset
+                            (i32.const 2))    ;; length
+                      (i32.const 2)
+                  )
+                  (else
+                      ;; Copy 'Goodbye' to memory 0
+                      (memory.init 1
+                            (i32.const 16)    ;; target offset
+                            (i32.const 0)     ;; source offset
+                            (i32.const 7))    ;; length
+                      (i32.const 7)
+                  )
+               )
 
-          (if (result i32) (i32.eq (call $host_function) (i32.const 0))
-              (then
-                  ;; Copy 'hi' to memory 0
-                  (memory.init 0
-                        (i32.const 16)    ;; target offset
-                        (i32.const 0)     ;; source offset
-                        (i32.const 2))    ;; length
-                  (i32.const 2)
-              )
-              (else
-                  ;; Copy 'by' to memory 0
-                  (memory.init 1
-                        (i32.const 16)    ;; target offset
-                        (i32.const 0)     ;; source offset
-                        (i32.const 7))    ;; length
-                  (i32.const 7)
-              )
-           )
+               (call $log)
 
-           call $log
+               ;; Test growing memory
+               (memory.grow (call $host_function))
+               (drop)
 
-           ;; Call and return host function
-           call $host_function
+               ;; Call and return host function
+               (call $host_function)
           )
           (export "my_func" (func $my_func_f)))
         "#,
@@ -86,7 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Create an import object.
-    let env1 = FnEnv{ number: 0, memory: Default::default() };
+    let env1 = FnEnv{ number: 2, memory: Default::default() };
     let host_function1 = Function::new_native_with_env(&store, env1.clone(), host_fn);
     let log_function1 = Function::new_native_with_env(&store, env1, log_fn);
     let import_object1 = imports!{
@@ -133,7 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result1: i32 = result1[0].clone().try_into().unwrap();
     let result2: i32 = result2[0].clone().try_into().unwrap();
 
-    assert!(result1 == 0);
+    assert!(result1 == 2);
     assert!(result2 == 42);
 
     println!("Success");
