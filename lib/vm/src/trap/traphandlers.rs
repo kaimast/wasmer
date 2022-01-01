@@ -133,10 +133,10 @@ cfg_if::cfg_if! {
                     // range [stackaddr - guard pages .. stackaddr + stacksize).
                     // We assume the guard page is 1 page, and pages are 4KiB (or 16KiB in Apple Silicon)
                     if stackaddr - region::page::size() <= addr && addr < stackaddr + stacksize {
-                        log::debug!("libc detected a stack overflow at {:#X} (stackaddr={:#X}, stacksize={:#X})", addr, stackaddr, stacksize);
+                        log::debug!("libc detected a stack overflow at {addr:#X} (stackaddr={stackaddr:#X}, stacksize={stacksize:#X})");
                         Some(TrapCode::StackOverflow)
                     } else {
-                        log::debug!("libc detected an out-of-bounds heap access at {:#X}", addr);
+                        log::debug!("libc detected an out-of-bounds heap access at {addr:#X}");
                         Some(TrapCode::HeapAccessOutOfBounds)
                     }
                 }
@@ -192,6 +192,8 @@ cfg_if::cfg_if! {
             // returning the signal to it's original disposition and returning.
             let previous = &*previous.as_ptr();
             if previous.sa_flags & libc::SA_SIGINFO != 0 {
+                log::trace!("Not inside a WebAssembly VM. Forwarding signal to next sighandler");
+
                 mem::transmute::<
                     usize,
                     extern "C" fn(libc::c_int, *mut libc::siginfo_t, *mut libc::c_void),
@@ -199,8 +201,12 @@ cfg_if::cfg_if! {
             } else if previous.sa_sigaction == libc::SIG_DFL ||
                 previous.sa_sigaction == libc::SIG_IGN
             {
+                log::trace!("Not inside a WebAssembly VM. Crashing...");
+
                 libc::sigaction(signum, previous, ptr::null_mut());
             } else {
+                log::trace!("Not inside a WebAssembly VM. Forwarding signal to next sighandler");
+
                 mem::transmute::<usize, extern "C" fn(libc::c_int)>(
                     previous.sa_sigaction
                 )(signum)
