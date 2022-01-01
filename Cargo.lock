@@ -54,9 +54,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.51"
+version = "1.0.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b26702f315f53b6071259e15dd9d64528213b44d61de1ec926eca7715d62203"
+checksum = "84450d0b4a8bd1ba4144ce8ce718fbc5d071358b1e5384bace6536b3d1f2d5b3"
 
 [[package]]
 name = "arbitrary"
@@ -948,9 +948,9 @@ dependencies = [
 
 [[package]]
 name = "erased-serde"
-version = "0.3.16"
+version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3de9ad4541d99dc22b59134e7ff8dc3d6c988c89ecd7324bf10a8362b07a2afa"
+checksum = "44a5d80251b806a14cd3e4e1a582e912d5cbf6904ab19fdefbd7a56adca088e1"
 dependencies = [
  "serde",
 ]
@@ -1294,9 +1294,9 @@ dependencies = [
 
 [[package]]
 name = "inventory"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1367fed6750ff2a5bcb967a631528303bb85631f167a75eb1bf7762d57eb7678"
+checksum = "aa2f6fdbc5fd6457ae78e0313ba2eb5cb509655bbcfe8c577096cdbae8ff621c"
 dependencies = [
  "ctor",
  "ghost",
@@ -1585,9 +1585,9 @@ dependencies = [
 
 [[package]]
 name = "num_cpus"
-version = "1.13.0"
+version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05499f3756671c15885fee9034446956fff3f243d6077b91e5767df161f766b3"
+checksum = "19e64526ebdee182341572e50e9ad03965aa510cd94427a4549448f285e957a1"
 dependencies = [
  "hermit-abi",
  "libc",
@@ -1694,9 +1694,9 @@ dependencies = [
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.7"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d31d11c69a6b52a174b42bdc0c30e5e11670f90788b2c471c31c1d17d449443"
+checksum = "e280fbe77cc62c91527259e9442153f4688736748d24660126286329742b4c6c"
 
 [[package]]
 name = "pkg-config"
@@ -1747,9 +1747,9 @@ dependencies = [
 
 [[package]]
 name = "ppv-lite86"
-version = "0.2.15"
+version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed0cfbc8191465bed66e1718596ee0b0b35d5ee1f41c5df2189d0fe8bde535ba"
+checksum = "eb9f9e6e233e5c4a35559a617bf40a4ec447db2e84c20b55a6f83167b7e57872"
 
 [[package]]
 name = "predicates"
@@ -1835,9 +1835,9 @@ checksum = "dbf0c48bc1d91375ae5c3cd81e3722dff1abcf81a30960240640d223f59fe0e5"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.34"
+version = "1.0.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f84e92c0f7c9d58328b85a78557813e4bd845130db68d7184635344399423b1"
+checksum = "c7342d5883fbccae1cc37a2353b09c87c9b0f3afd73f5fb9bba687a1f733b029"
 dependencies = [
  "unicode-xid",
 ]
@@ -1864,9 +1864,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.10"
+version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38bc8cc6a5f2e3655e0899c1b848643b2562f853f114bfec7be120678e3ace05"
+checksum = "47aa80447ce4daf1717500037052af176af5d38cc3e571d9ec1c7353fc10c87d"
 dependencies = [
  "proc-macro2",
 ]
@@ -2231,9 +2231,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.132"
+version = "1.0.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b9875c23cf305cd1fd7eb77234cbb705f21ea6a72c637a5c6db5fe4b8e7f008"
+checksum = "97565067517b60e2d1ea8b268e59ce036de907ac523ad83a0475da04e818989a"
 dependencies = [
  "serde_derive",
 ]
@@ -2259,9 +2259,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.132"
+version = "1.0.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecc0db5cb2556c0e558887d9bbdcf6ac4471e83ff66cf696e5419024d1606276"
+checksum = "ed201699328568d8d08208fdd080e3ff594e6c422e438b6705905da01005d537"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2270,9 +2270,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.73"
+version = "1.0.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcbd0344bc6533bc7ec56df11d42fb70f1b912351c0825ccb7211b59d8af7cf5"
+checksum = "ee2bb9cd061c5865d345bb02ca49fcef1391741b672b54a0bf7b679badec3142"
 dependencies = [
  "itoa 1.0.1",
  "ryu",
@@ -2324,9 +2324,9 @@ checksum = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
 
 [[package]]
 name = "signal-hook"
-version = "0.3.12"
+version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c35dfd12afb7828318348b8c408383cf5071a086c1d4ab1c0f9840ec92dbb922"
+checksum = "647c97df271007dcea485bb74ffdb57f2e683f1306c854f468a0c244badabf2d"
 dependencies = [
  "libc",
  "signal-hook-registry",
@@ -2492,9 +2492,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.82"
+version = "1.0.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8daf5dd0bb60cbd4137b1b587d2fc0ae729bc07cf01cd70b36a1ed5ade3b9d59"
+checksum = "ecb2e6da8ee5eb9a61068762a32fa9619cc591ceb055b3687f4cd4051ec2e06b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2726,9 +2726,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-subscriber"
-version = "0.3.3"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "245da694cc7fc4729f3f418b304cb57789f1bed2a78c575407ab8a23f53cb4d3"
+checksum = "5d81bfa81424cc98cb034b837c985b7a290f592e5b4322f353f94a0ab0f9f594"
 dependencies = [
  "lazy_static",
  "matchers",
@@ -2766,9 +2766,9 @@ dependencies = [
 
 [[package]]
 name = "typenum"
-version = "1.14.0"
+version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b63708a265f51345575b27fe43f9500ad611579e764c79edbc2037b1121959ec"
+checksum = "dcf81ac59edc17cc8697ff311e8f5ef2d99fcbd9817b34cec66f90b6c3dfd987"
 
 [[package]]
 name = "typetag"
@@ -2843,9 +2843,9 @@ checksum = "d63556a25bae6ea31b52e640d7c41d1ab27faba4ccb600013837a3d0b3994ca1"
 
 [[package]]
 name = "version_check"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fecdca9a5291cc2b8dcf7dc02453fee791a280f3743cb0905f8822ae463b3fe"
+checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "wait-timeout"
@@ -2881,7 +2881,7 @@ checksum = "fd6fbd9a79829dd1ad0cc20627bf1ed606756a7f77edff7b66b7064f9cb327c6"
 
 [[package]]
 name = "wasi-test-generator"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "glob",
  "gumdrop",
@@ -3004,7 +3004,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "anyhow",
  "async-wormhole",
@@ -3055,7 +3055,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-c-api"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "cbindgen",
  "cfg-if 1.0.0",
@@ -3084,7 +3084,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-cache"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "blake3",
  "criterion",
@@ -3100,7 +3100,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-cli"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "anyhow",
  "atty",
@@ -3133,7 +3133,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-compiler"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "enumset",
  "hashbrown 0.11.2",
@@ -3151,7 +3151,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-compiler-cranelift"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "cranelift-codegen",
  "cranelift-entity",
@@ -3172,7 +3172,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-compiler-llvm"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "byteorder",
  "cc",
@@ -3195,7 +3195,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-compiler-singlepass"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "byteorder",
  "dynasm",
@@ -3214,7 +3214,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-derive"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "compiletest_rs",
  "proc-macro-error",
@@ -3226,7 +3226,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-emscripten"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "byteorder",
  "getrandom",
@@ -3239,7 +3239,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-engine"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "backtrace",
  "enumset",
@@ -3259,7 +3259,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-engine-dummy"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "bincode",
  "enumset",
@@ -3274,7 +3274,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-engine-dylib"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "cfg-if 1.0.0",
  "enumset",
@@ -3295,7 +3295,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-engine-staticlib"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "bincode",
  "cfg-if 1.0.0",
@@ -3315,7 +3315,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-engine-universal"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "cfg-if 1.0.0",
  "enumset",
@@ -3332,7 +3332,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-integration-tests-cli"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "anyhow",
  "tempfile",
@@ -3340,11 +3340,11 @@ dependencies = [
 
 [[package]]
 name = "wasmer-integration-tests-ios"
-version = "2.1.0"
+version = "2.1.1"
 
 [[package]]
 name = "wasmer-middlewares"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "loupe",
  "wasmer",
@@ -3354,7 +3354,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-object"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "object",
  "thiserror",
@@ -3364,7 +3364,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-types"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "indexmap",
  "loupe",
@@ -3375,7 +3375,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-vfs"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "libc",
  "serde",
@@ -3387,7 +3387,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-vm"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "backtrace",
  "cc",
@@ -3409,7 +3409,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-wasi"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "bincode",
  "cfg-if 1.0.0",
@@ -3431,7 +3431,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-wasi-experimental-io-devices"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "minifb",
  "nix 0.20.2",
@@ -3444,7 +3444,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-wasi-types"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "byteorder",
  "serde",
@@ -3454,7 +3454,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-wast"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -3468,7 +3468,7 @@ dependencies = [
 
 [[package]]
 name = "wasmer-workspace"
-version = "2.1.0"
+version = "2.1.1"
 dependencies = [
  "anyhow",
  "async-wormhole",
