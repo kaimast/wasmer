@@ -180,6 +180,8 @@ impl Instance {
         let mut task = async_wormhole::AsyncWormhole::new(
             stack,
             |yielder| -> Result<Box<[crate::Val]>, RuntimeError> {
+                // Make sure the yielder does not get moved around in memory by pinning it
+                let yielder = Box::pin(yielder);
                 let yielder_ptr: *mut std::ffi::c_void = unsafe { std::mem::transmute(&yielder) };
 
                 let func = self
