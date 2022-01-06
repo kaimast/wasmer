@@ -174,7 +174,7 @@ impl Instance {
         func_name: &str,
         stack: Stack,
         mut params: Vec<V>,
-    ) -> Result<Box<[crate::Val]>, RuntimeError> {
+    ) -> (Result<Box<[crate::Val]>, RuntimeError>, Stack) {
         use std::iter::FromIterator;
 
         let mut task = async_wormhole::AsyncWormhole::new(
@@ -223,7 +223,9 @@ impl Instance {
             });
         }
 
-        task.await
+        let result = (&mut task).await;
+
+        (result, task.stack())
     }
 
     /// Returns the [`Store`] where the `Instance` belongs.
