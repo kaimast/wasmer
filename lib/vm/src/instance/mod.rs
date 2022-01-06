@@ -1289,7 +1289,7 @@ impl InstanceHandle {
         Some(self.lookup_by_declaration(&export))
     }
 
-    ///TODO
+    /// This sets the stack-specific yielder for async calls
     #[cfg(feature = "async")]
     pub fn set_yielder(&self, yield_ptr: *const std::ffi::c_void) {
         let instance = self.instance.as_ref();

@@ -146,7 +146,7 @@ pub struct LazyInit<T: Sized> {
 }
 
 impl<T> LazyInit<T> {
-    /// Creates an unitialized value.
+    /// Creates an uninitialized value.
     pub fn new() -> Self {
         Self {
             data: std::mem::MaybeUninit::uninit(),
@@ -180,6 +180,15 @@ impl<T> LazyInit<T> {
         self.initialized = true;
         true
     }
+
+    /// Sets a value and marks the data as initialized, even if already initialized
+    pub fn force_initialize(&mut self, value: T) {
+        unsafe {
+            self.data.as_mut_ptr().write(value);
+        }
+        self.initialized = true;
+    }
+
 }
 
 impl<T: std::fmt::Debug> std::fmt::Debug for LazyInit<T> {

@@ -219,7 +219,7 @@ fn derive_struct_fields(data: &DataStruct) -> (TokenStream, TokenStream) {
 
                     let yielder_tokens = quote_spanned! {f.span()=>
                         let obj = wasmer::Yielder::new(yielder_ptr);
-                        self.#var_name.initialize(obj);
+                        self.#var_name.force_initialize(obj);
                     };
 
                     yielder.push(yielder_tokens);
