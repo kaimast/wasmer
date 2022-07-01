@@ -1,17 +1,18 @@
+use crate::sys::exports::Exportable;
 use crate::sys::store::Store;
 use crate::sys::types::{ExportType, ImportType};
 use crate::sys::InstantiationError;
-use loupe::MemoryUsage;
 use std::fmt;
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
-use wasmer_compiler::CompileError;
+use wasmer_compiler::Artifact;
 #[cfg(feature = "wat")]
-use wasmer_compiler::WasmError;
-use wasmer_engine::{Artifact, DeserializeError, Resolver, SerializeError};
-use wasmer_types::{ExportsIterator, ImportsIterator, ModuleInfo};
+use wasmer_types::WasmError;
+use wasmer_types::{
+    CompileError, DeserializeError, ExportsIterator, ImportsIterator, ModuleInfo, SerializeError,
+};
 use wasmer_vm::InstanceHandle;
 
 #[derive(Error, Debug)]
@@ -32,10 +33,24 @@ pub enum IoCompileError {
 ///
 /// Cloning a module is cheap: it does a shallow copy of the compiled
 /// contents rather than a deep copy.
-#[derive(Clone, MemoryUsage)]
+#[derive(Clone)]
 pub struct Module {
-    store: Store,
+    // The field ordering here is actually significant because of the drop
+    // order: we want to drop the artifact before dropping the engine.
+    //
+    // The reason for this is that dropping the Artifact will de-register the
+    // trap handling metadata from the global registry. This must be done before
+    // the code memory for the artifact is freed (which happens when the store
+    // is dropped) since there is a chance that this memory could be reused by
+    // another module which will try to register its own trap information.
+    //
+    // Note that in Rust, the drop order for struct fields is from top to
+    // bottom: the opposite of C++.
+    //
+    // In the future, this code should be refactored to properly describe the
+    // ownership of the code and its metadata.
     artifact: Arc<dyn Artifact>,
+    store: Store,
 }
 
 impl Module {
@@ -263,13 +278,16 @@ impl Module {
 
     pub(crate) fn instantiate(
         &self,
-        resolver: &dyn Resolver,
+        imports: &[crate::Extern],
     ) -> Result<InstanceHandle, InstantiationError> {
         unsafe {
             let instance_handle = self.artifact.instantiate(
                 self.store.tunables(),
-                resolver,
-                Arc::new((self.store.clone(), self.artifact.clone())),
+                &imports
+                    .iter()
+                    .map(crate::Extern::to_export)
+                    .collect::<Vec<_>>(),
+                Arc::new(self.clone()),
             )?;
 
             // After the instance handle is created, we need to initialize
@@ -329,11 +347,10 @@ impl Module {
     pub fn set_name(&mut self, name: &str) -> bool {
         Arc::get_mut(&mut self.artifact)
             .and_then(|artifact| artifact.module_mut())
-            .map(|mut module_info| {
+            .map_or(false, |mut module_info| {
                 module_info.name = Some(name.to_string());
                 true
             })
-            .unwrap_or(false)
     }
 
     /// Returns an iterator over the imported types in the Module.
@@ -360,7 +377,7 @@ impl Module {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn imports<'a>(&'a self) -> ImportsIterator<impl Iterator<Item = ImportType> + 'a> {
+    pub fn imports(&self) -> ImportsIterator<impl Iterator<Item = ImportType> + '_> {
         self.artifact.module_ref().imports()
     }
 
@@ -387,7 +404,7 @@ impl Module {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn exports<'a>(&'a self) -> ExportsIterator<impl Iterator<Item = ExportType> + 'a> {
+    pub fn exports(&self) -> ExportsIterator<impl Iterator<Item = ExportType> + '_> {
         self.artifact.module_ref().exports()
     }
 
@@ -414,7 +431,7 @@ impl Module {
     /// However, the usage is highly discouraged.
     #[doc(hidden)]
     pub fn info(&self) -> &ModuleInfo {
-        &self.artifact.module_ref()
+        self.artifact.module_ref()
     }
 
     /// Gets the [`Artifact`] used internally by the Module.

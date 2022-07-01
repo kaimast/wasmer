@@ -32,15 +32,15 @@ static BASIC_WAT: &str = r#"(module
 )"#;
 
 pub fn run_basic_static_function(store: &Store, compiler_name: &str, c: &mut Criterion) {
-    let module = Module::new(&store, BASIC_WAT).unwrap();
+    let module = Module::new(store, BASIC_WAT).unwrap();
     let import_object = imports! {
         "env" => {
-            "multiply" => Function::new_native(&store, |a: i32, b: i32| a * b),
+            "multiply" => Function::new_native(store, |a: i32, b: i32| a * b),
         },
     };
     let instance = Instance::new(&module, &import_object).unwrap();
     let dyn_f: &Function = instance.exports.get("add").unwrap();
-    let f: NativeFunc<(i32, i32), i32> = dyn_f.native().unwrap();
+    let f: TypedFunction<(i32, i32), i32> = dyn_f.native().unwrap();
 
     c.bench_function(&format!("basic static func {}", compiler_name), |b| {
         b.iter(|| {
@@ -50,7 +50,7 @@ pub fn run_basic_static_function(store: &Store, compiler_name: &str, c: &mut Cri
     });
 
     let dyn_f_many: &Function = instance.exports.get("add20").unwrap();
-    let f_many: NativeFunc<
+    let f_many: TypedFunction<
         (
             i32,
             i32,
@@ -93,10 +93,10 @@ pub fn run_basic_static_function(store: &Store, compiler_name: &str, c: &mut Cri
 }
 
 pub fn run_basic_dynamic_function(store: &Store, compiler_name: &str, c: &mut Criterion) {
-    let module = Module::new(&store, BASIC_WAT).unwrap();
+    let module = Module::new(store, BASIC_WAT).unwrap();
     let import_object = imports! {
         "env" => {
-            "multiply" => Function::new_native(&store, |a: i32, b: i32| a * b),
+            "multiply" => Function::new_native(store, |a: i32, b: i32| a * b),
         },
     };
     let instance = Instance::new(&module, &import_object).unwrap();
@@ -149,21 +149,24 @@ pub fn run_basic_dynamic_function(store: &Store, compiler_name: &str, c: &mut Cr
 fn run_static_benchmarks(_c: &mut Criterion) {
     #[cfg(feature = "llvm")]
     {
-        let store = Store::new(&Universal::new(wasmer_compiler_llvm::LLVM::new()).engine());
+        let store =
+            Store::new_with_engine(&Universal::new(wasmer_compiler_llvm::LLVM::new()).engine());
         run_basic_static_function(&store, "llvm", c);
     }
 
     #[cfg(feature = "cranelift")]
     {
-        let store =
-            Store::new(&Universal::new(wasmer_compiler_cranelift::Cranelift::new()).engine());
+        let store = Store::new_with_engine(
+            &Universal::new(wasmer_compiler_cranelift::Cranelift::new()).engine(),
+        );
         run_basic_static_function(&store, "cranelift", c);
     }
 
     #[cfg(feature = "singlepass")]
     {
-        let store =
-            Store::new(&Universal::new(wasmer_compiler_singlepass::Singlepass::new()).engine());
+        let store = Store::new_with_engine(
+            &Universal::new(wasmer_compiler_singlepass::Singlepass::new()).engine(),
+        );
         run_basic_static_function(&store, "singlepass", c);
     }
 }
@@ -171,21 +174,24 @@ fn run_static_benchmarks(_c: &mut Criterion) {
 fn run_dynamic_benchmarks(_c: &mut Criterion) {
     #[cfg(feature = "llvm")]
     {
-        let store = Store::new(&Universal::new(wasmer_compiler_llvm::LLVM::new()).engine());
+        let store =
+            Store::new_with_engine(&Universal::new(wasmer_compiler_llvm::LLVM::new()).engine());
         run_basic_dynamic_function(&store, "llvm", c);
     }
 
     #[cfg(feature = "cranelift")]
     {
-        let store =
-            Store::new(&Universal::new(wasmer_compiler_cranelift::Cranelift::new()).engine());
+        let store = Store::new_with_engine(
+            &Universal::new(wasmer_compiler_cranelift::Cranelift::new()).engine(),
+        );
         run_basic_dynamic_function(&store, "cranelift", c);
     }
 
     #[cfg(feature = "singlepass")]
     {
-        let store =
-            Store::new(&Universal::new(wasmer_compiler_singlepass::Singlepass::new()).engine());
+        let store = Store::new_with_engine(
+            &Universal::new(wasmer_compiler_singlepass::Singlepass::new()).engine(),
+        );
         run_basic_dynamic_function(&store, "singlepass", c);
     }
 }

@@ -15,9 +15,9 @@
 //! Ready?
 
 use std::mem;
-use wasmer::{imports, wat2wasm, Bytes, Instance, Module, NativeFunc, Pages, Store};
+use wasmer::{imports, wat2wasm, Bytes, Instance, Module, Pages, Store, TypedFunction};
+use wasmer_compiler::Universal;
 use wasmer_compiler_cranelift::Cranelift;
-use wasmer_engine_universal::Universal;
 
 // this example is a work in progress:
 // TODO: clean it up and comment it https://github.com/wasmerio/wasmer/issues/1749
@@ -57,7 +57,7 @@ fn main() -> anyhow::Result<()> {
     // Note that we don't need to specify the engine/compiler if we want to use
     // the default provided by Wasmer.
     // You can use `Store::default()` for that.
-    let store = Store::new(&Universal::new(Cranelift::default()).engine());
+    let store = Store::new_with_engine(&Universal::new(Cranelift::default()).engine());
 
     println!("Compiling module...");
     // Let's compile the Wasm module.
@@ -73,9 +73,9 @@ fn main() -> anyhow::Result<()> {
     // The module exports some utility functions, let's get them.
     //
     // These function will be used later in this example.
-    let mem_size: NativeFunc<(), i32> = instance.exports.get_native_function("mem_size")?;
-    let get_at: NativeFunc<i32, i32> = instance.exports.get_native_function("get_at")?;
-    let set_at: NativeFunc<(i32, i32), ()> = instance.exports.get_native_function("set_at")?;
+    let mem_size: TypedFunction<(), i32> = instance.exports.get_native_function("mem_size")?;
+    let get_at: TypedFunction<i32, i32> = instance.exports.get_native_function("get_at")?;
+    let set_at: TypedFunction<(i32, i32), ()> = instance.exports.get_native_function("set_at")?;
     let memory = instance.exports.get_memory("memory")?;
 
     // We now have an instance ready to be used.

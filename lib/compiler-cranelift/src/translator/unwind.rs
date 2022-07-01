@@ -5,7 +5,8 @@
 use cranelift_codegen::isa::unwind::{systemv::UnwindInfo as DwarfFDE, UnwindInfo};
 use cranelift_codegen::print_errors::pretty_error;
 use cranelift_codegen::{isa, Context};
-use wasmer_compiler::{CompileError, CompiledFunctionUnwindInfo};
+use wasmer_types::CompileError;
+use wasmer_types::CompiledFunctionUnwindInfo;
 
 /// Cranelift specific unwind info
 pub(crate) enum CraneliftUnwindInfo {
@@ -14,7 +15,7 @@ pub(crate) enum CraneliftUnwindInfo {
     WindowsX64(Vec<u8>),
     /// Dwarf FDE
     #[cfg(feature = "unwind")]
-    FDE(DwarfFDE),
+    Fde(DwarfFDE),
     /// No Unwind info attached
     None,
 }
@@ -43,7 +44,7 @@ pub(crate) fn compiled_function_unwind_info(
 ) -> Result<CraneliftUnwindInfo, CompileError> {
     let unwind_info = context
         .create_unwind_info(isa)
-        .map_err(|error| CompileError::Codegen(pretty_error(&context.func, Some(isa), error)))?;
+        .map_err(|error| CompileError::Codegen(pretty_error(&context.func, error)))?;
 
     match unwind_info {
         Some(UnwindInfo::WindowsX64(unwind)) => {
@@ -52,7 +53,7 @@ pub(crate) fn compiled_function_unwind_info(
             unwind.emit(&mut data[..]);
             Ok(CraneliftUnwindInfo::WindowsX64(data))
         }
-        Some(UnwindInfo::SystemV(unwind)) => Ok(CraneliftUnwindInfo::FDE(unwind)),
+        Some(UnwindInfo::SystemV(unwind)) => Ok(CraneliftUnwindInfo::Fde(unwind)),
         Some(_) | None => Ok(CraneliftUnwindInfo::None),
     }
 }

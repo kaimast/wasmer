@@ -1,13 +1,11 @@
 use crate::sys::externals::{Extern, Function, Global, Memory, Table};
-use crate::sys::import_object::LikeNamespace;
-use crate::sys::native::NativeFunc;
+use crate::sys::native::TypedFunction;
 use crate::sys::WasmTypeList;
 use indexmap::IndexMap;
-use loupe::MemoryUsage;
 use std::fmt;
 use std::iter::{ExactSizeIterator, FromIterator};
 use thiserror::Error;
-use wasmer_engine::Export;
+use wasmer_compiler::Export;
 
 /// The `ExportError` can happen when trying to get a specific
 /// export [`Extern`] from the [`Instance`] exports.
@@ -61,7 +59,7 @@ pub enum ExportError {
 /// the types of instances.
 ///
 /// TODO: add examples of using exports
-#[derive(Clone, Default, MemoryUsage)]
+#[derive(Clone, Default)]
 pub struct Exports {
     map: IndexMap<String, Extern>,
 }
@@ -136,11 +134,11 @@ impl Exports {
         self.get(name)
     }
 
-    /// Get an export as a `NativeFunc`.
+    /// Get an export as a `TypedFunction`.
     pub fn get_native_function<Args, Rets>(
         &self,
         name: &str,
-    ) -> Result<NativeFunc<Args, Rets>, ExportError>
+    ) -> Result<TypedFunction<Args, Rets>, ExportError>
     where
         Args: WasmTypeList,
         Rets: WasmTypeList,
@@ -172,7 +170,7 @@ impl Exports {
         T: ExportableWithGenerics<'a, Args, Rets>,
     {
         let mut out: T = self.get_with_generics(name)?;
-        out.into_weak_instance_ref();
+        out.convert_to_weak_instance_ref();
         Ok(out)
     }
 
@@ -276,20 +274,21 @@ impl FromIterator<(String, Extern)> for Exports {
     }
 }
 
-impl LikeNamespace for Exports {
-    fn get_namespace_export(&self, name: &str) -> Option<Export> {
-        self.map.get(name).map(|is_export| is_export.to_export())
-    }
+impl IntoIterator for Exports {
+    type IntoIter = indexmap::map::IntoIter<String, Extern>;
+    type Item = (String, Extern);
 
-    fn get_namespace_exports(&self) -> Vec<(String, Export)> {
-        self.map
-            .iter()
-            .map(|(k, v)| (k.clone(), v.to_export()))
-            .collect()
+    fn into_iter(self) -> Self::IntoIter {
+        self.map.into_iter()
     }
+}
 
-    fn as_exports(&self) -> Option<Exports> {
-        Some(self.clone())
+impl<'a> IntoIterator for &'a Exports {
+    type IntoIter = indexmap::map::Iter<'a, String, Extern>;
+    type Item = (&'a String, &'a Extern);
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.map.iter()
     }
 }
 
@@ -312,11 +311,11 @@ pub trait Exportable<'a>: Sized {
     /// Convert the extern internally to hold a weak reference to the `InstanceRef`.
     /// This is useful for preventing cycles, for example for data stored in a
     /// type implementing `WasmerEnv`.
-    fn into_weak_instance_ref(&mut self);
+    fn convert_to_weak_instance_ref(&mut self);
 }
 
 /// A trait for accessing exports (like [`Exportable`]) but it takes generic
-/// `Args` and `Rets` parameters so that `NativeFunc` can be accessed directly
+/// `Args` and `Rets` parameters so that `TypedFunction` can be accessed directly
 /// as well.
 pub trait ExportableWithGenerics<'a, Args: WasmTypeList, Rets: WasmTypeList>: Sized {
     /// Get an export with the given generics.
@@ -324,7 +323,7 @@ pub trait ExportableWithGenerics<'a, Args: WasmTypeList, Rets: WasmTypeList>: Si
     /// Convert the extern internally to hold a weak reference to the `InstanceRef`.
     /// This is useful for preventing cycles, for example for data stored in a
     /// type implementing `WasmerEnv`.
-    fn into_weak_instance_ref(&mut self);
+    fn convert_to_weak_instance_ref(&mut self);
 }
 
 /// We implement it for all concrete [`Exportable`] types (that are `Clone`)
@@ -334,7 +333,7 @@ impl<'a, T: Exportable<'a> + Clone + 'static> ExportableWithGenerics<'a, (), ()>
         T::get_self_from_extern(_extern).map(|i| i.clone())
     }
 
-    fn into_weak_instance_ref(&mut self) {
-        <Self as Exportable>::into_weak_instance_ref(self);
+    fn convert_to_weak_instance_ref(&mut self) {
+        <Self as Exportable>::convert_to_weak_instance_ref(self);
     }
 }

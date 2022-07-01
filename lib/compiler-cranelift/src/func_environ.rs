@@ -14,16 +14,16 @@ use cranelift_codegen::isa::TargetFrontendConfig;
 use cranelift_frontend::{FunctionBuilder, Variable};
 use std::convert::TryFrom;
 use wasmer_compiler::wasmparser::Type;
-use wasmer_compiler::{WasmError, WasmResult};
 use wasmer_types::entity::EntityRef;
 use wasmer_types::entity::PrimaryMap;
+use wasmer_types::VMBuiltinFunctionIndex;
+use wasmer_types::VMOffsets;
 use wasmer_types::{
     FunctionIndex, FunctionType, GlobalIndex, LocalFunctionIndex, MemoryIndex, ModuleInfo,
     SignatureIndex, TableIndex, Type as WasmerType,
 };
-use wasmer_vm::VMBuiltinFunctionIndex;
-use wasmer_vm::VMOffsets;
-use wasmer_vm::{MemoryStyle, TableStyle};
+use wasmer_types::{MemoryStyle, TableStyle};
+use wasmer_types::{WasmError, WasmResult};
 
 /// Compute an `ir::ExternalName` for a given wasm function index.
 pub fn get_function_name(func_index: FunctionIndex) -> ir::ExternalName {
@@ -744,7 +744,7 @@ impl<'module_environment> FuncEnvironment<'module_environment> {
     ) -> (ir::Value, ir::Value) {
         // We use an indirect call so that we don't have to patch the code at runtime.
         let pointer_type = self.pointer_type();
-        let vmctx = self.vmctx(&mut pos.func);
+        let vmctx = self.vmctx(pos.func);
         let base = pos.ins().global_value(pointer_type, vmctx);
 
         let mut mem_flags = ir::MemFlags::trusted();
@@ -834,7 +834,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         delta: ir::Value,
         init_value: ir::Value,
     ) -> WasmResult<ir::Value> {
-        let (func_sig, index_arg, func_idx) = self.get_table_grow_func(&mut pos.func, table_index);
+        let (func_sig, index_arg, func_idx) = self.get_table_grow_func(pos.func, table_index);
         let table_index = pos.ins().iconst(I32, index_arg as i64);
         let (vmctx, func_addr) = self.translate_load_builtin_function_address(&mut pos, func_idx);
         let call_inst = pos.ins().call_indirect(
@@ -854,8 +854,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
     ) -> WasmResult<ir::Value> {
         let mut pos = builder.cursor();
 
-        let (func_sig, table_index_arg, func_idx) =
-            self.get_table_get_func(&mut pos.func, table_index);
+        let (func_sig, table_index_arg, func_idx) = self.get_table_get_func(pos.func, table_index);
         let table_index = pos.ins().iconst(I32, table_index_arg as i64);
         let (vmctx, func_addr) = self.translate_load_builtin_function_address(&mut pos, func_idx);
         let call_inst = pos
@@ -874,8 +873,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
     ) -> WasmResult<()> {
         let mut pos = builder.cursor();
 
-        let (func_sig, table_index_arg, func_idx) =
-            self.get_table_set_func(&mut pos.func, table_index);
+        let (func_sig, table_index_arg, func_idx) = self.get_table_set_func(pos.func, table_index);
         let table_index = pos.ins().iconst(I32, table_index_arg as i64);
         let (vmctx, func_addr) = self.translate_load_builtin_function_address(&mut pos, func_idx);
         pos.ins()
@@ -891,8 +889,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         val: ir::Value,
         len: ir::Value,
     ) -> WasmResult<()> {
-        let (func_sig, table_index_arg, func_idx) =
-            self.get_table_fill_func(&mut pos.func, table_index);
+        let (func_sig, table_index_arg, func_idx) = self.get_table_fill_func(pos.func, table_index);
         let (vmctx, func_addr) = self.translate_load_builtin_function_address(&mut pos, func_idx);
 
         let table_index_arg = pos.ins().iconst(I32, table_index_arg as i64);
@@ -910,7 +907,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
         externref: ir::Value,
     ) -> WasmResult<()> {
-        let (func_sig, func_idx) = self.get_externref_inc_func(&mut pos.func);
+        let (func_sig, func_idx) = self.get_externref_inc_func(pos.func);
         let (_vmctx, func_addr) = self.translate_load_builtin_function_address(&mut pos, func_idx);
 
         pos.ins().call_indirect(func_sig, func_addr, &[externref]);
@@ -923,7 +920,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         mut pos: cranelift_codegen::cursor::FuncCursor<'_>,
         externref: ir::Value,
     ) -> WasmResult<()> {
-        let (func_sig, func_idx) = self.get_externref_dec_func(&mut pos.func);
+        let (func_sig, func_idx) = self.get_externref_dec_func(pos.func);
         let (_vmctx, func_addr) = self.translate_load_builtin_function_address(&mut pos, func_idx);
 
         pos.ins().call_indirect(func_sig, func_addr, &[externref]);
@@ -979,8 +976,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         //
         // prototyping with a function call though
 
-        let (func_sig, func_index_arg, func_idx) =
-            self.get_func_ref_func(&mut pos.func, func_index);
+        let (func_sig, func_index_arg, func_idx) = self.get_func_ref_func(pos.func, func_index);
         let (vmctx, func_addr) = self.translate_load_builtin_function_address(&mut pos, func_idx);
 
         let func_index_arg = pos.ins().iconst(I32, func_index_arg as i64);
@@ -1132,9 +1128,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         Ok(func.import_function(ir::ExtFuncData {
             name,
             signature,
-            // We currently allocate all code segments independently, so nothing
-            // is colocated.
-            colocated: false,
+            colocated: true,
         }))
     }
 
@@ -1246,7 +1240,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         // so that we don't have to patch the code at runtime.
         let pointer_type = self.pointer_type();
         let sig_ref = pos.func.dfg.ext_funcs[callee].signature;
-        let vmctx = self.vmctx(&mut pos.func);
+        let vmctx = self.vmctx(pos.func);
         let base = pos.ins().global_value(pointer_type, vmctx);
 
         let mem_flags = ir::MemFlags::trusted();
@@ -1275,7 +1269,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         _heap: ir::Heap,
         val: ir::Value,
     ) -> WasmResult<ir::Value> {
-        let (func_sig, index_arg, func_idx) = self.get_memory_grow_func(&mut pos.func, index);
+        let (func_sig, index_arg, func_idx) = self.get_memory_grow_func(pos.func, index);
         let memory_index = pos.ins().iconst(I32, index_arg as i64);
         let (vmctx, func_addr) = self.translate_load_builtin_function_address(&mut pos, func_idx);
         let call_inst = pos
@@ -1290,7 +1284,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         index: MemoryIndex,
         _heap: ir::Heap,
     ) -> WasmResult<ir::Value> {
-        let (func_sig, index_arg, func_idx) = self.get_memory_size_func(&mut pos.func, index);
+        let (func_sig, index_arg, func_idx) = self.get_memory_size_func(pos.func, index);
         let memory_index = pos.ins().iconst(I32, index_arg as i64);
         let (vmctx, func_addr) = self.translate_load_builtin_function_address(&mut pos, func_idx);
         let call_inst = pos
@@ -1310,7 +1304,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         src: ir::Value,
         len: ir::Value,
     ) -> WasmResult<()> {
-        let (func_sig, src_index, func_idx) = self.get_memory_copy_func(&mut pos.func, src_index);
+        let (func_sig, src_index, func_idx) = self.get_memory_copy_func(pos.func, src_index);
 
         let src_index_arg = pos.ins().iconst(I32, src_index as i64);
 
@@ -1331,8 +1325,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         val: ir::Value,
         len: ir::Value,
     ) -> WasmResult<()> {
-        let (func_sig, memory_index, func_idx) =
-            self.get_memory_fill_func(&mut pos.func, memory_index);
+        let (func_sig, memory_index, func_idx) = self.get_memory_fill_func(pos.func, memory_index);
 
         let memory_index_arg = pos.ins().iconst(I32, memory_index as i64);
 
@@ -1357,7 +1350,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         src: ir::Value,
         len: ir::Value,
     ) -> WasmResult<()> {
-        let (func_sig, func_idx) = self.get_memory_init_func(&mut pos.func);
+        let (func_sig, func_idx) = self.get_memory_init_func(pos.func);
 
         let memory_index_arg = pos.ins().iconst(I32, memory_index.index() as i64);
         let seg_index_arg = pos.ins().iconst(I32, seg_index as i64);
@@ -1374,7 +1367,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
     }
 
     fn translate_data_drop(&mut self, mut pos: FuncCursor, seg_index: u32) -> WasmResult<()> {
-        let (func_sig, func_idx) = self.get_data_drop_func(&mut pos.func);
+        let (func_sig, func_idx) = self.get_data_drop_func(pos.func);
         let seg_index_arg = pos.ins().iconst(I32, seg_index as i64);
         let (vmctx, func_addr) = self.translate_load_builtin_function_address(&mut pos, func_idx);
         pos.ins()
@@ -1388,7 +1381,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         table_index: TableIndex,
         _table: ir::Table,
     ) -> WasmResult<ir::Value> {
-        let (func_sig, index_arg, func_idx) = self.get_table_size_func(&mut pos.func, table_index);
+        let (func_sig, index_arg, func_idx) = self.get_table_size_func(pos.func, table_index);
         let table_index = pos.ins().iconst(I32, index_arg as i64);
         let (vmctx, func_addr) = self.translate_load_builtin_function_address(&mut pos, func_idx);
         let call_inst = pos
@@ -1409,7 +1402,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         len: ir::Value,
     ) -> WasmResult<()> {
         let (func_sig, dst_table_index_arg, src_table_index_arg, func_idx) =
-            self.get_table_copy_func(&mut pos.func, dst_table_index, src_table_index);
+            self.get_table_copy_func(pos.func, dst_table_index, src_table_index);
 
         let dst_table_index_arg = pos.ins().iconst(I32, dst_table_index_arg as i64);
         let src_table_index_arg = pos.ins().iconst(I32, src_table_index_arg as i64);
@@ -1442,8 +1435,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
         src: ir::Value,
         len: ir::Value,
     ) -> WasmResult<()> {
-        let (func_sig, table_index_arg, func_idx) =
-            self.get_table_init_func(&mut pos.func, table_index);
+        let (func_sig, table_index_arg, func_idx) = self.get_table_init_func(pos.func, table_index);
 
         let table_index_arg = pos.ins().iconst(I32, table_index_arg as i64);
         let seg_index_arg = pos.ins().iconst(I32, seg_index as i64);
@@ -1460,7 +1452,7 @@ impl<'module_environment> BaseFuncEnvironment for FuncEnvironment<'module_enviro
     }
 
     fn translate_elem_drop(&mut self, mut pos: FuncCursor, elem_index: u32) -> WasmResult<()> {
-        let (func_sig, func_idx) = self.get_elem_drop_func(&mut pos.func);
+        let (func_sig, func_idx) = self.get_elem_drop_func(pos.func);
 
         let elem_index_arg = pos.ins().iconst(I32, elem_index as i64);
 

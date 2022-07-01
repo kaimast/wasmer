@@ -93,10 +93,10 @@ use smallvec::SmallVec;
 use std::vec::Vec;
 
 use wasmer_compiler::wasmparser::{MemoryImmediate, Operator, Type as WPType};
-use wasmer_compiler::WasmResult;
-use wasmer_compiler::{wasm_unsupported, ModuleTranslationState};
+use wasmer_compiler::{from_binaryreadererror_wasmerror, wasm_unsupported, ModuleTranslationState};
 use wasmer_types::{
     FunctionIndex, GlobalIndex, MemoryIndex, SignatureIndex, TableIndex, Type as WasmerType,
+    WasmResult,
 };
 
 // Clippy warns about "align: _" but its important to document that the align field is ignored
@@ -114,7 +114,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
     environ: &mut FE,
 ) -> WasmResult<()> {
     if !state.reachable {
-        translate_unreachable_operator(module_translation_state, &op, builder, state, environ)?;
+        translate_unreachable_operator(module_translation_state, op, builder, state, environ)?;
         return Ok(());
     }
 
@@ -128,13 +128,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let val = builder.use_var(Variable::with_u32(*local_index));
             let local_type = environ.get_local_type(*local_index).unwrap();
             let ref_counted = local_type == WasmerType::ExternRef;
-            state.push1_extra((
-                val,
-                ValueExtraInfo {
-                    ref_counted,
-                    ..Default::default()
-                },
-            ));
+            state.push1_extra((val, ValueExtraInfo { ref_counted }));
             let label = ValueLabel::from_u32(*local_index);
             builder.set_val_label(val, label);
 
@@ -199,13 +193,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                         environ.translate_externref_inc(builder.cursor(), value)?;
                     }
 
-                    (
-                        value,
-                        ValueExtraInfo {
-                            ref_counted,
-                            ..Default::default()
-                        },
-                    )
+                    (value, ValueExtraInfo { ref_counted })
                 }
                 GlobalVariable::Custom => (
                     environ.translate_custom_global_get(builder.cursor(), global_index)?,
@@ -253,7 +241,13 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         }
         Operator::Select => {
             // we can ignore metadata because extern ref must use TypedSelect
-            let ((arg1, _), (arg2, _), (cond, _)) = state.pop3();
+            let ((mut arg1, _), (mut arg2, _), (cond, _)) = state.pop3();
+            if builder.func.dfg.value_type(arg1).is_vector() {
+                arg1 = optionally_bitcast_vector(arg1, I8X16, builder);
+            }
+            if builder.func.dfg.value_type(arg2).is_vector() {
+                arg2 = optionally_bitcast_vector(arg2, I8X16, builder);
+            }
             state.push1(builder.ins().select(cond, arg1, arg2));
         }
         Operator::TypedSelect { ty } => {
@@ -262,13 +256,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             if ref_counted {
                 let selected_ref = builder.ins().select(cond, arg1, arg2);
                 let not_selected_ref = builder.ins().select(cond, arg2, arg1);
-                state.push1_extra((
-                    selected_ref,
-                    ValueExtraInfo {
-                        ref_counted,
-                        ..Default::default()
-                    },
-                ));
+                state.push1_extra((selected_ref, ValueExtraInfo { ref_counted }));
                 environ.translate_externref_dec(builder.cursor(), not_selected_ref)?;
             } else {
                 state.push1_extra((
@@ -495,12 +483,12 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         }
         Operator::BrIf { relative_depth } => translate_br_if(*relative_depth, builder, state),
         Operator::BrTable { table } => {
-            let mut depths = table.targets().collect::<Result<Vec<_>, _>>()?;
-            let default = depths.pop().unwrap().0;
+            let default = table.default();
             let mut min_depth = default;
-            for (depth, _) in depths.iter() {
-                if *depth < min_depth {
-                    min_depth = *depth;
+            for depth in table.targets() {
+                let depth = depth.map_err(from_binaryreadererror_wasmerror)?;
+                if depth < min_depth {
+                    min_depth = depth;
                 }
             }
             let jump_args_count = {
@@ -513,12 +501,13 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 }
             };
             let (val, _) = state.pop1();
-            let mut data = JumpTableData::with_capacity(depths.len());
+            let mut data = JumpTableData::with_capacity(table.len() as usize);
             if jump_args_count == 0 {
                 // No jump arguments
-                for (depth, _) in depths.iter() {
+                for depth in table.targets() {
+                    let depth = depth.map_err(from_binaryreadererror_wasmerror)?;
                     let block = {
-                        let i = state.control_stack.len() - 1 - (*depth as usize);
+                        let i = state.control_stack.len() - 1 - (depth as usize);
                         let frame = &mut state.control_stack[i];
                         frame.set_branched_to_exit();
                         frame.br_destination()
@@ -539,12 +528,13 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
                 let return_count = jump_args_count;
                 let mut dest_block_sequence = vec![];
                 let mut dest_block_map = HashMap::new();
-                for (depth, _) in depths.iter() {
-                    let branch_block = match dest_block_map.entry(*depth as usize) {
+                for depth in table.targets() {
+                    let depth = depth.map_err(from_binaryreadererror_wasmerror)?;
+                    let branch_block = match dest_block_map.entry(depth as usize) {
                         hash_map::Entry::Occupied(entry) => *entry.get(),
                         hash_map::Entry::Vacant(entry) => {
                             let block = builder.create_block();
-                            dest_block_sequence.push((*depth as usize, block));
+                            dest_block_sequence.push((depth as usize, block));
                             *entry.insert(block)
                         }
                     };
@@ -608,7 +598,6 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         Operator::Try { .. }
         | Operator::Catch { .. }
         | Operator::Throw { .. }
-        | Operator::Unwind
         | Operator::Rethrow { .. }
         | Operator::Delegate { .. }
         | Operator::CatchAll => {
@@ -631,7 +620,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let callee_signature =
                 &builder.func.dfg.signatures[builder.func.dfg.ext_funcs[fref].signature];
             let types = wasm_param_types(&callee_signature.params, |i| {
-                environ.is_wasm_parameter(&callee_signature, i)
+                environ.is_wasm_parameter(callee_signature, i)
             });
             bitcast_arguments(args, &types, builder);
             let func_index = FunctionIndex::from_u32(*function_index);
@@ -649,10 +638,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let mut results_metadata = Vec::with_capacity(func_type.results().len());
             for result in func_type.results() {
                 results_metadata.push(if *result == WasmerType::ExternRef {
-                    ValueExtraInfo {
-                        ref_counted: true,
-                        ..Default::default()
-                    }
+                    ValueExtraInfo { ref_counted: true }
                 } else {
                     Default::default()
                 });
@@ -671,7 +657,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let callee_signature = &builder.func.dfg.signatures[sigref];
             let (args, _) = state.peekn_mut(num_args);
             let types = wasm_param_types(&callee_signature.params, |i| {
-                environ.is_wasm_parameter(&callee_signature, i)
+                environ.is_wasm_parameter(callee_signature, i)
             });
             bitcast_arguments(args, &types, builder);
 
@@ -697,10 +683,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let mut results_metadata = Vec::with_capacity(func_type.results().len());
             for result in func_type.results() {
                 results_metadata.push(if *result == WasmerType::ExternRef {
-                    ValueExtraInfo {
-                        ref_counted: true,
-                        ..Default::default()
-                    }
+                    ValueExtraInfo { ref_counted: true }
                 } else {
                     Default::default()
                 });
@@ -1569,17 +1552,17 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         | Operator::V128Store32Lane { memarg, lane }
         | Operator::V128Store64Lane { memarg, lane } => {
             let vector = pop1_with_bitcast(state, type_of(op), builder);
-            state.push1(builder.ins().extractlane(vector, lane.clone()));
+            state.push1(builder.ins().extractlane(vector, *lane));
             translate_store(memarg, ir::Opcode::Store, builder, state, environ)?;
         }
         Operator::I8x16ExtractLaneS { lane } | Operator::I16x8ExtractLaneS { lane } => {
             let vector = pop1_with_bitcast(state, type_of(op), builder);
-            let extracted = builder.ins().extractlane(vector, lane.clone());
+            let extracted = builder.ins().extractlane(vector, *lane);
             state.push1(builder.ins().sextend(I32, extracted))
         }
         Operator::I8x16ExtractLaneU { lane } | Operator::I16x8ExtractLaneU { lane } => {
             let vector = pop1_with_bitcast(state, type_of(op), builder);
-            let extracted = builder.ins().extractlane(vector, lane.clone());
+            let extracted = builder.ins().extractlane(vector, *lane);
             state.push1(builder.ins().uextend(I32, extracted));
             // On x86, PEXTRB zeroes the upper bits of the destination register of extractlane so
             // uextend could be elided; for now, uextend is needed for Cranelift's type checks to
@@ -1590,7 +1573,7 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
         | Operator::F32x4ExtractLane { lane }
         | Operator::F64x2ExtractLane { lane } => {
             let vector = pop1_with_bitcast(state, type_of(op), builder);
-            state.push1(builder.ins().extractlane(vector, lane.clone()))
+            state.push1(builder.ins().extractlane(vector, *lane))
         }
         Operator::I8x16ReplaceLane { lane } | Operator::I16x8ReplaceLane { lane } => {
             let ((vector, _), (replacement, _)) = state.pop2();
@@ -1861,13 +1844,42 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let a = pop1_with_bitcast(state, I32X4, builder);
             state.push1(builder.ins().fcvt_low_from_sint(F64X2, a));
         }
+        Operator::F64x2ConvertLowI32x4U => {
+            let a = pop1_with_bitcast(state, I32X4, builder);
+            let widened_a = builder.ins().uwiden_low(a);
+            state.push1(builder.ins().fcvt_from_uint(F64X2, widened_a));
+        }
+        Operator::F64x2PromoteLowF32x4 => {
+            let a = pop1_with_bitcast(state, F32X4, builder);
+            state.push1(builder.ins().fvpromote_low(a));
+        }
+        Operator::F32x4DemoteF64x2Zero => {
+            let a = pop1_with_bitcast(state, F64X2, builder);
+            state.push1(builder.ins().fvdemote(a));
+        }
         Operator::I32x4TruncSatF32x4S => {
             let a = pop1_with_bitcast(state, F32X4, builder);
             state.push1(builder.ins().fcvt_to_sint_sat(I32X4, a))
         }
+        Operator::I32x4TruncSatF64x2SZero => {
+            let a = pop1_with_bitcast(state, F64X2, builder);
+            let converted_a = builder.ins().fcvt_to_sint_sat(I64X2, a);
+            let handle = builder.func.dfg.constants.insert(vec![0u8; 16].into());
+            let zero = builder.ins().vconst(I64X2, handle);
+
+            state.push1(builder.ins().snarrow(converted_a, zero));
+        }
         Operator::I32x4TruncSatF32x4U => {
             let a = pop1_with_bitcast(state, F32X4, builder);
             state.push1(builder.ins().fcvt_to_uint_sat(I32X4, a))
+        }
+        Operator::I32x4TruncSatF64x2UZero => {
+            let a = pop1_with_bitcast(state, F64X2, builder);
+            let converted_a = builder.ins().fcvt_to_uint_sat(I64X2, a);
+            let handle = builder.func.dfg.constants.insert(vec![0u8; 16].into());
+            let zero = builder.ins().vconst(I64X2, handle);
+
+            state.push1(builder.ins().uunarrow(converted_a, zero));
         }
         Operator::I8x16NarrowI16x8S => {
             let (a, b) = pop2_with_bitcast(state, I16X8, builder);
@@ -1918,6 +1930,46 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             state.push1(builder.ins().uwiden_high(a))
         }
 
+        Operator::I64x2ExtendLowI32x4S => {
+            let a = pop1_with_bitcast(state, I32X4, builder);
+            state.push1(builder.ins().swiden_low(a))
+        }
+        Operator::I64x2ExtendHighI32x4S => {
+            let a = pop1_with_bitcast(state, I32X4, builder);
+            state.push1(builder.ins().swiden_high(a))
+        }
+        Operator::I64x2ExtendLowI32x4U => {
+            let a = pop1_with_bitcast(state, I32X4, builder);
+            state.push1(builder.ins().uwiden_low(a))
+        }
+        Operator::I64x2ExtendHighI32x4U => {
+            let a = pop1_with_bitcast(state, I32X4, builder);
+            state.push1(builder.ins().uwiden_high(a))
+        }
+        Operator::I16x8ExtAddPairwiseI8x16S => {
+            let a = pop1_with_bitcast(state, I8X16, builder);
+            let widen_low = builder.ins().swiden_low(a);
+            let widen_high = builder.ins().swiden_high(a);
+            state.push1(builder.ins().iadd_pairwise(widen_low, widen_high));
+        }
+        Operator::I32x4ExtAddPairwiseI16x8S => {
+            let a = pop1_with_bitcast(state, I16X8, builder);
+            let widen_low = builder.ins().swiden_low(a);
+            let widen_high = builder.ins().swiden_high(a);
+            state.push1(builder.ins().iadd_pairwise(widen_low, widen_high));
+        }
+        Operator::I16x8ExtAddPairwiseI8x16U => {
+            let a = pop1_with_bitcast(state, I8X16, builder);
+            let widen_low = builder.ins().uwiden_low(a);
+            let widen_high = builder.ins().uwiden_high(a);
+            state.push1(builder.ins().iadd_pairwise(widen_low, widen_high));
+        }
+        Operator::I32x4ExtAddPairwiseI16x8U => {
+            let a = pop1_with_bitcast(state, I16X8, builder);
+            let widen_low = builder.ins().uwiden_low(a);
+            let widen_high = builder.ins().uwiden_high(a);
+            state.push1(builder.ins().iadd_pairwise(widen_low, widen_high));
+        }
         Operator::F32x4Ceil | Operator::F64x2Ceil => {
             // This is something of a misuse of `type_of`, because that produces the return type
             // of `op`.  In this case we want the arg type, but we know it's the same as the
@@ -1941,37 +1993,107 @@ pub fn translate_operator<FE: FuncEnvironment + ?Sized>(
             let (a, b) = pop2_with_bitcast(state, I16X8, builder);
             state.push1(builder.ins().widening_pairwise_dot_product_s(a, b));
         }
-        Operator::I64x2ExtendLowI32x4S
-        | Operator::I64x2ExtendHighI32x4S
-        | Operator::I64x2ExtendLowI32x4U
-        | Operator::I64x2ExtendHighI32x4U
-        | Operator::I16x8Q15MulrSatS
-        | Operator::I16x8ExtMulLowI8x16S
-        | Operator::I16x8ExtMulHighI8x16S
-        | Operator::I16x8ExtMulLowI8x16U
-        | Operator::I16x8ExtMulHighI8x16U
-        | Operator::I32x4ExtMulLowI16x8S
-        | Operator::I32x4ExtMulHighI16x8S
-        | Operator::I32x4ExtMulLowI16x8U
-        | Operator::I32x4ExtMulHighI16x8U
-        | Operator::I64x2ExtMulLowI32x4S
-        | Operator::I64x2ExtMulHighI32x4S
-        | Operator::I64x2ExtMulLowI32x4U
-        | Operator::I64x2ExtMulHighI32x4U
-        | Operator::I16x8ExtAddPairwiseI8x16S
-        | Operator::I16x8ExtAddPairwiseI8x16U
-        | Operator::I32x4ExtAddPairwiseI16x8S
-        | Operator::I32x4ExtAddPairwiseI16x8U
-        | Operator::F32x4DemoteF64x2Zero
-        | Operator::F64x2PromoteLowF32x4
-        | Operator::F64x2ConvertLowI32x4U
-        | Operator::I32x4TruncSatF64x2SZero
-        | Operator::I32x4TruncSatF64x2UZero
-        | Operator::I8x16Popcnt => {
-            return Err(wasm_unsupported!("proposed simd operator {:?}", op));
+        Operator::I8x16Popcnt => {
+            let arg = pop1_with_bitcast(state, type_of(op), builder);
+            state.push1(builder.ins().popcnt(arg));
+        }
+        Operator::I16x8Q15MulrSatS => {
+            let (a, b) = pop2_with_bitcast(state, I16X8, builder);
+            state.push1(builder.ins().sqmul_round_sat(a, b))
+        }
+        Operator::I16x8ExtMulLowI8x16S => {
+            let (a, b) = pop2_with_bitcast(state, I8X16, builder);
+            let a_low = builder.ins().swiden_low(a);
+            let b_low = builder.ins().swiden_low(b);
+            state.push1(builder.ins().imul(a_low, b_low));
+        }
+        Operator::I16x8ExtMulHighI8x16S => {
+            let (a, b) = pop2_with_bitcast(state, I8X16, builder);
+            let a_high = builder.ins().swiden_high(a);
+            let b_high = builder.ins().swiden_high(b);
+            state.push1(builder.ins().imul(a_high, b_high));
+        }
+        Operator::I16x8ExtMulLowI8x16U => {
+            let (a, b) = pop2_with_bitcast(state, I8X16, builder);
+            let a_low = builder.ins().uwiden_low(a);
+            let b_low = builder.ins().uwiden_low(b);
+            state.push1(builder.ins().imul(a_low, b_low));
+        }
+        Operator::I16x8ExtMulHighI8x16U => {
+            let (a, b) = pop2_with_bitcast(state, I8X16, builder);
+            let a_high = builder.ins().uwiden_high(a);
+            let b_high = builder.ins().uwiden_high(b);
+            state.push1(builder.ins().imul(a_high, b_high));
+        }
+        Operator::I32x4ExtMulLowI16x8S => {
+            let (a, b) = pop2_with_bitcast(state, I16X8, builder);
+            let a_low = builder.ins().swiden_low(a);
+            let b_low = builder.ins().swiden_low(b);
+            state.push1(builder.ins().imul(a_low, b_low));
+        }
+        Operator::I32x4ExtMulHighI16x8S => {
+            let (a, b) = pop2_with_bitcast(state, I16X8, builder);
+            let a_high = builder.ins().swiden_high(a);
+            let b_high = builder.ins().swiden_high(b);
+            state.push1(builder.ins().imul(a_high, b_high));
+        }
+        Operator::I32x4ExtMulLowI16x8U => {
+            let (a, b) = pop2_with_bitcast(state, I16X8, builder);
+            let a_low = builder.ins().uwiden_low(a);
+            let b_low = builder.ins().uwiden_low(b);
+            state.push1(builder.ins().imul(a_low, b_low));
+        }
+        Operator::I32x4ExtMulHighI16x8U => {
+            let (a, b) = pop2_with_bitcast(state, I16X8, builder);
+            let a_high = builder.ins().uwiden_high(a);
+            let b_high = builder.ins().uwiden_high(b);
+            state.push1(builder.ins().imul(a_high, b_high));
+        }
+        Operator::I64x2ExtMulLowI32x4S => {
+            let (a, b) = pop2_with_bitcast(state, I32X4, builder);
+            let a_low = builder.ins().swiden_low(a);
+            let b_low = builder.ins().swiden_low(b);
+            state.push1(builder.ins().imul(a_low, b_low));
+        }
+        Operator::I64x2ExtMulHighI32x4S => {
+            let (a, b) = pop2_with_bitcast(state, I32X4, builder);
+            let a_high = builder.ins().swiden_high(a);
+            let b_high = builder.ins().swiden_high(b);
+            state.push1(builder.ins().imul(a_high, b_high));
+        }
+        Operator::I64x2ExtMulLowI32x4U => {
+            let (a, b) = pop2_with_bitcast(state, I32X4, builder);
+            let a_low = builder.ins().uwiden_low(a);
+            let b_low = builder.ins().uwiden_low(b);
+            state.push1(builder.ins().imul(a_low, b_low));
+        }
+        Operator::I64x2ExtMulHighI32x4U => {
+            let (a, b) = pop2_with_bitcast(state, I32X4, builder);
+            let a_high = builder.ins().uwiden_high(a);
+            let b_high = builder.ins().uwiden_high(b);
+            state.push1(builder.ins().imul(a_high, b_high));
         }
         Operator::ReturnCall { .. } | Operator::ReturnCallIndirect { .. } => {
             return Err(wasm_unsupported!("proposed tail-call operator {:?}", op));
+        }
+        Operator::I8x16RelaxedSwizzle
+        | Operator::I32x4RelaxedTruncSatF32x4S
+        | Operator::I32x4RelaxedTruncSatF32x4U
+        | Operator::I32x4RelaxedTruncSatF64x2SZero
+        | Operator::I32x4RelaxedTruncSatF64x2UZero
+        | Operator::F32x4Fma
+        | Operator::F32x4Fms
+        | Operator::F64x2Fma
+        | Operator::F64x2Fms
+        | Operator::I8x16LaneSelect
+        | Operator::I16x8LaneSelect
+        | Operator::I32x4LaneSelect
+        | Operator::I64x2LaneSelect
+        | Operator::F32x4RelaxedMin
+        | Operator::F32x4RelaxedMax
+        | Operator::F64x2RelaxedMin
+        | Operator::F64x2RelaxedMax => {
+            return Err(wasm_unsupported!("proposed relaxed-simd operator {:?}", op));
         }
     };
     Ok(())
@@ -2206,7 +2328,7 @@ fn prepare_load<FE: FuncEnvironment + ?Sized>(
     let (base, offset) = get_heap_addr(
         heap,
         addr32,
-        memarg.offset,
+        memarg.offset as u32,
         loaded_bytes,
         environ.pointer_type(),
         builder,
@@ -2258,7 +2380,7 @@ fn translate_store<FE: FuncEnvironment + ?Sized>(
     let (base, offset) = get_heap_addr(
         heap,
         addr32,
-        memarg.offset,
+        memarg.offset as u32,
         mem_op_size(opcode, val_ty),
         environ.pointer_type(),
         builder,
@@ -2300,7 +2422,7 @@ fn fold_atomic_mem_addr(
         let linear_mem_addr = builder.ins().uextend(I64, linear_mem_addr);
         let a = builder
             .ins()
-            .iadd_imm(linear_mem_addr, i64::from(memarg.offset));
+            .iadd_imm(linear_mem_addr, memarg.offset as i64);
         let cflags = builder.ins().ifcmp_imm(a, 0x1_0000_0000i64);
         builder.ins().trapif(
             IntCC::UnsignedGreaterThanOrEqual,
@@ -2338,7 +2460,7 @@ fn finalise_atomic_mem_addr<FE: FuncEnvironment + ?Sized>(
     let access_ty_bytes = access_ty.bytes();
     let final_lma = builder
         .ins()
-        .iadd_imm(linear_mem_addr, i64::from(memarg.offset));
+        .iadd_imm(linear_mem_addr, memarg.offset as i64);
     if access_ty_bytes != 1 {
         assert!(access_ty_bytes == 2 || access_ty_bytes == 4 || access_ty_bytes == 8);
         let final_lma_misalignment = builder
@@ -2390,10 +2512,7 @@ fn translate_atomic_rmw<FE: FuncEnvironment + ?Sized>(
             ))
         }
     };
-    let w_ty_ok = match widened_ty {
-        I32 | I64 => true,
-        _ => false,
-    };
+    let w_ty_ok = matches!(widened_ty, I32 | I64);
     assert!(w_ty_ok && widened_ty.bytes() >= access_ty.bytes());
 
     assert!(arg2_ty.bytes() >= access_ty.bytes());
@@ -2440,10 +2559,7 @@ fn translate_atomic_cas<FE: FuncEnvironment + ?Sized>(
             ))
         }
     };
-    let w_ty_ok = match widened_ty {
-        I32 | I64 => true,
-        _ => false,
-    };
+    let w_ty_ok = matches!(widened_ty, I32 | I64);
     assert!(w_ty_ok && widened_ty.bytes() >= access_ty.bytes());
 
     assert!(expected_ty.bytes() >= access_ty.bytes());
@@ -2492,10 +2608,7 @@ fn translate_atomic_load<FE: FuncEnvironment + ?Sized>(
             ))
         }
     };
-    let w_ty_ok = match widened_ty {
-        I32 | I64 => true,
-        _ => false,
-    };
+    let w_ty_ok = matches!(widened_ty, I32 | I64);
     assert!(w_ty_ok && widened_ty.bytes() >= access_ty.bytes());
 
     let final_effective_address =
@@ -2535,10 +2648,7 @@ fn translate_atomic_store<FE: FuncEnvironment + ?Sized>(
             ))
         }
     };
-    let d_ty_ok = match data_ty {
-        I32 | I64 => true,
-        _ => false,
-    };
+    let d_ty_ok = matches!(data_ty, I32 | I64);
     assert!(d_ty_ok && data_ty.bytes() >= access_ty.bytes());
 
     if data_ty.bytes() > access_ty.bytes() {
@@ -2673,7 +2783,8 @@ fn type_of(operator: &Operator) -> Type {
         | Operator::I8x16MaxS
         | Operator::I8x16MaxU
         | Operator::I8x16RoundingAverageU
-        | Operator::I8x16Bitmask => I8X16,
+        | Operator::I8x16Bitmask
+        | Operator::I8x16Popcnt => I8X16,
 
         Operator::I16x8Splat
         | Operator::V128Load16Splat { .. }
@@ -2741,9 +2852,9 @@ fn type_of(operator: &Operator) -> Type {
         | Operator::I32x4MinU
         | Operator::I32x4MaxS
         | Operator::I32x4MaxU
-        | Operator::F32x4ConvertI32x4S
-        | Operator::F32x4ConvertI32x4U
         | Operator::I32x4Bitmask
+        | Operator::I32x4TruncSatF32x4S
+        | Operator::I32x4TruncSatF32x4U
         | Operator::V128Load32Zero { .. } => I32X4,
 
         Operator::I64x2Splat
@@ -2790,8 +2901,8 @@ fn type_of(operator: &Operator) -> Type {
         | Operator::F32x4Max
         | Operator::F32x4PMin
         | Operator::F32x4PMax
-        | Operator::I32x4TruncSatF32x4S
-        | Operator::I32x4TruncSatF32x4U
+        | Operator::F32x4ConvertI32x4S
+        | Operator::F32x4ConvertI32x4U
         | Operator::F32x4Ceil
         | Operator::F32x4Floor
         | Operator::F32x4Trunc
@@ -2846,10 +2957,10 @@ fn optionally_bitcast_vector(
 
 #[inline(always)]
 fn is_non_canonical_v128(ty: ir::Type) -> bool {
-    match ty {
-        B8X16 | B16X8 | B32X4 | B64X2 | I64X2 | I32X4 | I16X8 | F32X4 | F64X2 => true,
-        _ => false,
-    }
+    matches!(
+        ty,
+        B8X16 | B16X8 | B32X4 | B64X2 | I64X2 | I32X4 | I16X8 | F32X4 | F64X2
+    )
 }
 
 /// Cast to I8X16, any vector values in `values` that are of "non-canonical" type (meaning, not

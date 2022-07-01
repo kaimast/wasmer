@@ -5,7 +5,6 @@ use inkwell::targets::{
 };
 pub use inkwell::OptimizationLevel as LLVMOptLevel;
 use itertools::Itertools;
-use loupe::MemoryUsage;
 use std::fmt::Debug;
 use std::sync::Arc;
 use target_lexicon::Architecture;
@@ -38,14 +37,12 @@ pub trait LLVMCallbacks: Debug + Send + Sync {
     fn obj_memory_buffer(&self, function: &CompiledKind, memory_buffer: &InkwellMemoryBuffer);
 }
 
-#[derive(Debug, Clone, MemoryUsage)]
+#[derive(Debug, Clone)]
 pub struct LLVM {
     pub(crate) enable_nan_canonicalization: bool,
     pub(crate) enable_verifier: bool,
-    #[loupe(skip)]
     pub(crate) opt_level: LLVMOptLevel,
     is_pic: bool,
-    #[loupe(skip)]
     pub(crate) callbacks: Option<Arc<dyn LLVMCallbacks>>,
     /// The middleware chain.
     pub(crate) middlewares: Vec<Arc<dyn ModuleMiddleware>>,
@@ -113,6 +110,7 @@ impl LLVM {
             //
             // Since both linux and darwin use SysV ABI, this should work.
             //  but not in the case of Aarch64, there the ABI is slightly different
+            #[allow(clippy::match_single_binding)]
             match target.triple().architecture {
                 _ => wasmer_compiler::OperatingSystem::Linux,
             }
@@ -177,7 +175,7 @@ impl LLVM {
             .map(|feature| format!("+{}", feature.to_string()))
             .join(",");
 
-        let target_triple = self.target_triple(&target);
+        let target_triple = self.target_triple(target);
         let llvm_target = InkwellTarget::from_triple(&target_triple).unwrap();
         llvm_target
             .create_target_machine(

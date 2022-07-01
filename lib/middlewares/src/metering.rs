@@ -8,10 +8,8 @@
 //! [See the `metering` detailed and complete
 //! example](https://github.com/wasmerio/wasmer/blob/master/examples/metering.rs).
 
-use loupe::{MemoryUsage, MemoryUsageTracker};
 use std::convert::TryInto;
 use std::fmt;
-use std::mem;
 use std::sync::{Arc, Mutex};
 use wasmer::wasmparser::{Operator, Type as WpType, TypeOrFuncType as WpTypeOrFuncType};
 use wasmer::{
@@ -20,7 +18,7 @@ use wasmer::{
 };
 use wasmer_types::{GlobalIndex, ModuleInfo};
 
-#[derive(Clone, MemoryUsage)]
+#[derive(Clone)]
 struct MeteringGlobalIndexes(GlobalIndex, GlobalIndex);
 
 impl MeteringGlobalIndexes {
@@ -195,13 +193,6 @@ impl<F: Fn(&Operator) -> u64 + Send + Sync + 'static> ModuleMiddleware for Meter
             remaining_points_global_index,
             points_exhausted_global_index,
         ))
-    }
-}
-
-impl<F: Fn(&Operator) -> u64 + Send + Sync + 'static> MemoryUsage for Metering<F> {
-    fn size_of_val(&self, tracker: &mut dyn MemoryUsageTracker) -> usize {
-        mem::size_of_val(self) + self.global_indexes.size_of_val(tracker)
-            - mem::size_of_val(&self.global_indexes)
     }
 }
 
@@ -391,8 +382,8 @@ mod tests {
     fn get_remaining_points_works() {
         let metering = Arc::new(Metering::new(10, cost_function));
         let mut compiler_config = Cranelift::default();
-        compiler_config.push_middleware(metering.clone());
-        let store = Store::new(&Universal::new(compiler_config).engine());
+        compiler_config.push_middleware(metering);
+        let store = Store::new_with_engine(&Universal::new(compiler_config).engine());
         let module = Module::new(&store, bytecode()).unwrap();
 
         // Instantiate
@@ -436,8 +427,8 @@ mod tests {
     fn set_remaining_points_works() {
         let metering = Arc::new(Metering::new(10, cost_function));
         let mut compiler_config = Cranelift::default();
-        compiler_config.push_middleware(metering.clone());
-        let store = Store::new(&Universal::new(compiler_config).engine());
+        compiler_config.push_middleware(metering);
+        let store = Store::new_with_engine(&Universal::new(compiler_config).engine());
         let module = Module::new(&store, bytecode()).unwrap();
 
         // Instantiate

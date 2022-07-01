@@ -63,11 +63,11 @@ fn issue_2329(mut config: crate::Config) -> Result<()> {
     "#;
     let module = Module::new(&store, wat)?;
     let env = Env::new();
-    let imports: ImportObject = imports! {
+    let imports: Imports = imports! {
         "env" => {
             "__read_memory" => Function::new_native_with_env(
                 &store,
-                env.clone(),
+                env,
                 read_memory
             ),
         }
@@ -103,14 +103,9 @@ fn call_with_static_data_pointers(mut config: crate::Config) -> Result<()> {
         h: u64,
     ) -> u64 {
         println!("{:?}", (a, b, c, d, e, f, g, h));
-        let view = env.memory.view::<u8>();
-        let bytes = view
-            .get(e as usize..(e + d) as usize)
-            .unwrap()
-            .into_iter()
-            .map(|b| b.get())
-            .collect::<Vec<u8>>();
-        let input_string = std::str::from_utf8(&bytes).unwrap();
+        let mut buf = vec![0; d as usize];
+        env.memory.read(e, &mut buf).unwrap();
+        let input_string = std::str::from_utf8(&buf).unwrap();
         assert_eq!(input_string, "bananapeach");
         0
     }
@@ -215,13 +210,49 @@ fn call_with_static_data_pointers(mut config: crate::Config) -> Result<()> {
         "mango",
         Function::new_native_with_env(&store, env.clone(), mango),
     );
-    exports.insert(
-        "gas",
-        Function::new_native_with_env(&store, env.clone(), gas),
-    );
-    let mut imports = ImportObject::new();
-    imports.register("env", exports);
+    exports.insert("gas", Function::new_native_with_env(&store, env, gas));
+    let mut imports = Imports::new();
+    imports.register_namespace("env", exports);
     let instance = Instance::new(&module, &imports)?;
     instance.exports.get_function("repro")?.call(&[])?;
+    Ok(())
+}
+
+/// Exhaustion of GPRs when calling a function with many floating point arguments
+///
+/// Note: this one is specific to Singlepass, but we want to test in all
+/// available compilers.
+#[compiler_test(issues)]
+fn regression_gpr_exhaustion_for_calls(mut config: crate::Config) -> Result<()> {
+    let store = config.store();
+    let wat = r#"
+        (module
+          (type (;0;) (func (param f64) (result i32)))
+          (type (;1;) (func (param f64 f64 f64 f64 f64 f64)))
+          (func (;0;) (type 0) (param f64) (result i32)
+            local.get 0
+            local.get 0
+            local.get 0
+            local.get 0
+            f64.const 0
+            f64.const 0
+            f64.const 0
+            f64.const 0
+            f64.const 0
+            f64.const 0
+            f64.const 0
+            i32.const 0
+            call_indirect (type 0)
+            call_indirect (type 1)
+            drop
+            drop
+            drop
+            drop
+            i32.const 0)
+          (table (;0;) 1 1 funcref))
+    "#;
+    let module = Module::new(&store, wat)?;
+    let imports: Imports = imports! {};
+    let instance = Instance::new(&module, &imports)?;
     Ok(())
 }

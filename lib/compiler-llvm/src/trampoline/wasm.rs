@@ -16,8 +16,9 @@ use inkwell::{
 use std::cmp;
 use std::convert::TryFrom;
 use std::convert::TryInto;
-use wasmer_compiler::{CompileError, FunctionBody, RelocationTarget};
-use wasmer_types::{FunctionType, LocalFunctionIndex};
+use wasmer_types::{
+    CompileError, FunctionBody, FunctionType, LocalFunctionIndex, RelocationTarget,
+};
 
 pub struct FuncTrampoline {
     ctx: Context,
@@ -156,11 +157,6 @@ impl FuncTrampoline {
                 "trampoline generation produced relocations".into(),
             ));
         }
-        if !compiled_function.jt_offsets.is_empty() {
-            return Err(CompileError::Codegen(
-                "trampoline generation produced jump tables".into(),
-            ));
-        }
         // Ignore CompiledFunctionFrameInfo. Extra frame info isn't a problem.
 
         Ok(FunctionBody {
@@ -281,11 +277,6 @@ impl FuncTrampoline {
                 "trampoline generation produced relocations".into(),
             ));
         }
-        if !compiled_function.jt_offsets.is_empty() {
-            return Err(CompileError::Codegen(
-                "trampoline generation produced jump tables".into(),
-            ));
-        }
         // Ignore CompiledFunctionFrameInfo. Extra frame info isn't a problem.
 
         Ok(FunctionBody {
@@ -351,7 +342,7 @@ impl FuncTrampoline {
         }
 
         let callable_func = inkwell::values::CallableValue::try_from(func_ptr).unwrap();
-        let call_site = builder.build_call(callable_func, args_vec.as_slice().into(), "call");
+        let call_site = builder.build_call(callable_func, args_vec.as_slice(), "call");
         for (attr, attr_loc) in func_attrs {
             call_site.add_attribute(*attr_loc, *attr);
         }
@@ -486,7 +477,7 @@ impl FuncTrampoline {
                 for (idx, value) in results.iter().enumerate() {
                     let value = builder.build_bitcast(
                         *value,
-                        type_to_llvm(&intrinsics, func_sig.results()[idx])?,
+                        type_to_llvm(intrinsics, func_sig.results()[idx])?,
                         "",
                     );
                     struct_value = builder
@@ -498,9 +489,9 @@ impl FuncTrampoline {
                 builder.build_return(None);
             } else {
                 builder.build_return(Some(&self.abi.pack_values_for_register_return(
-                    &intrinsics,
+                    intrinsics,
                     &builder,
-                    &results.as_slice(),
+                    results.as_slice(),
                     &trampoline_func.get_type(),
                 )?));
             }

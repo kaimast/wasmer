@@ -5,12 +5,11 @@
 //! long as we need them to.
 
 use crate::vmcontext::VMCallerCheckedAnyfunc;
-use loupe::MemoryUsage;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 /// The registry that holds the values that `VMFuncRef`s point to.
-#[derive(Debug, MemoryUsage)]
+#[derive(Debug, Default)]
 pub struct FuncDataRegistry {
     // This structure is stored in an `Engine` and is intended to be shared
     // across many instances. Ideally instances can themselves be sent across
@@ -26,7 +25,7 @@ unsafe impl Sync for FuncDataRegistry {}
 
 /// A function reference. A single word that points to metadata about a function.
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, MemoryUsage)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct VMFuncRef(pub(crate) *const VMCallerCheckedAnyfunc);
 
 impl wasmer_types::NativeWasmType for VMFuncRef {
@@ -87,35 +86,31 @@ impl std::ops::DerefMut for VMFuncRef {
 unsafe impl Send for VMFuncRef {}
 unsafe impl Sync for VMFuncRef {}
 
-#[derive(Debug, Default, MemoryUsage)]
+#[derive(Debug, Default)]
 struct Inner {
-    func_data: Vec<Box<VMCallerCheckedAnyfunc>>,
+    func_data: Vec<VMCallerCheckedAnyfunc>,
     anyfunc_to_index: HashMap<VMCallerCheckedAnyfunc, usize>,
 }
 
 impl FuncDataRegistry {
     /// Create a new `FuncDataRegistry`.
     pub fn new() -> Self {
-        Self {
-            inner: Default::default(),
-        }
+        Default::default()
     }
 
     /// Register a signature and return its unique index.
     pub fn register(&self, anyfunc: VMCallerCheckedAnyfunc) -> VMFuncRef {
         let mut inner = self.inner.lock().unwrap();
         if let Some(&idx) = inner.anyfunc_to_index.get(&anyfunc) {
-            let data: &Box<_> = &inner.func_data[idx];
+            let data: &_ = &inner.func_data[idx];
             let inner_ptr: &VMCallerCheckedAnyfunc = &*data;
             VMFuncRef(inner_ptr)
         } else {
-            let ptr = Box::new(anyfunc.clone());
-
             let idx = inner.func_data.len();
-            inner.func_data.push(ptr);
+            inner.func_data.push(anyfunc);
             inner.anyfunc_to_index.insert(anyfunc, idx);
 
-            let data: &Box<_> = &inner.func_data[idx];
+            let data: &_ = &inner.func_data[idx];
             let inner_ptr: &VMCallerCheckedAnyfunc = &*data;
             VMFuncRef(inner_ptr)
         }

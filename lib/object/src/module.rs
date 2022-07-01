@@ -3,14 +3,15 @@ use object::write::{
     Object, Relocation, StandardSection, StandardSegment, Symbol as ObjSymbol, SymbolSection,
 };
 use object::{
-    elf, RelocationEncoding, RelocationKind, SectionKind, SymbolFlags, SymbolKind, SymbolScope,
+    elf, macho, RelocationEncoding, RelocationKind, SectionKind, SymbolFlags, SymbolKind,
+    SymbolScope,
 };
-use wasmer_compiler::{
-    Architecture, BinaryFormat, Compilation, CustomSectionProtection, Endianness,
-    RelocationKind as Reloc, RelocationTarget, SectionIndex, Symbol, SymbolRegistry, Triple,
-};
+use wasmer_compiler::{Architecture, BinaryFormat, Endianness, Symbol, SymbolRegistry, Triple};
 use wasmer_types::entity::PrimaryMap;
 use wasmer_types::LocalFunctionIndex;
+use wasmer_types::{
+    Compilation, CustomSectionProtection, RelocationKind as Reloc, RelocationTarget, SectionIndex,
+};
 
 const DWARF_SECTION_NAME: &[u8] = b".eh_frame";
 
@@ -99,7 +100,7 @@ pub fn emit_data(
         flags: SymbolFlags::None,
     });
     let section_id = obj.section_id(StandardSection::Data);
-    obj.add_symbol_data(symbol_id, section_id, &data, align);
+    obj.add_symbol_data(symbol_id, section_id, data, align);
 
     Ok(())
 }
@@ -109,7 +110,8 @@ pub fn emit_data(
 /// # Usage
 ///
 /// ```rust
-/// # use wasmer_compiler::{Compilation, SymbolRegistry, Triple};
+/// # use wasmer_compiler::{SymbolRegistry, Triple};
+/// # use wasmer_types::Compilation;
 /// # use wasmer_object::ObjectError;
 /// use wasmer_object::{get_object_for_target, emit_compilation};
 ///
@@ -149,7 +151,7 @@ pub fn emit_compilation(
     let custom_section_ids = custom_sections
         .into_iter()
         .map(|(section_index, custom_section)| {
-            if debug_index.map(|d| d == section_index).unwrap_or(false) {
+            if debug_index.map_or(false, |d| d == section_index) {
                 // If this is the debug section
                 let segment = obj.segment_name(StandardSegment::Debug).to_vec();
                 let section_id =
@@ -263,7 +265,7 @@ pub fn emit_compilation(
     }
 
     for (section_index, relocations) in custom_section_relocations.into_iter() {
-        if !debug_index.map(|d| d == section_index).unwrap_or(false) {
+        if !debug_index.map_or(false, |d| d == section_index) {
             // Skip DWARF relocations just yet
             let (section_id, symbol_id) = custom_section_ids.get(section_index).unwrap();
             all_relocations.push((*section_id, *symbol_id, relocations));
@@ -274,6 +276,8 @@ pub fn emit_compilation(
         let (_symbol_id, section_offset) = obj.symbol_section_and_offset(symbol_id).unwrap();
 
         for r in relocations {
+            let relocation_address = section_offset + r.offset as u64;
+
             let (relocation_kind, relocation_encoding, relocation_size) = match r.kind {
                 Reloc::Abs4 => (RelocationKind::Absolute, RelocationEncoding::Generic, 32),
                 Reloc::Abs8 => (RelocationKind::Absolute, RelocationEncoding::Generic, 64),
@@ -289,10 +293,15 @@ pub fn emit_compilation(
                 Reloc::X86GOTPCRel4 => {
                     (RelocationKind::GotRelative, RelocationEncoding::Generic, 32)
                 }
-                // Reloc::X86PCRelRodata4 => {
-                // }
                 Reloc::Arm64Call => (
-                    RelocationKind::Elf(elf::R_AARCH64_CALL26),
+                    match obj.format() {
+                        object::BinaryFormat::Elf => RelocationKind::Elf(elf::R_AARCH64_CALL26),
+                        object::BinaryFormat::MachO => RelocationKind::MachO {
+                            value: macho::ARM64_RELOC_BRANCH26,
+                            relative: true,
+                        },
+                        fmt => panic!("unsupported binary format {:?}", fmt),
+                    },
                     RelocationEncoding::Generic,
                     32,
                 ),
@@ -308,8 +317,6 @@ pub fn emit_compilation(
                     )))
                 }
             };
-
-            let relocation_address = section_offset + r.offset as u64;
 
             match r.reloc_target {
                 RelocationTarget::LocalFunc(index) => {
@@ -369,9 +376,6 @@ pub fn emit_compilation(
                         },
                     )
                     .map_err(ObjectError::Write)?;
-                }
-                RelocationTarget::JumpTable(_func_index, _jt) => {
-                    // do nothing
                 }
             };
         }

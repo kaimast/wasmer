@@ -16,9 +16,9 @@
 
 use anyhow::bail;
 use std::fmt;
-use wasmer::{imports, wat2wasm, Function, Instance, Module, NativeFunc, Store};
+use wasmer::{imports, wat2wasm, Function, Instance, Module, Store, TypedFunction};
+use wasmer_compiler::Universal;
 use wasmer_compiler_cranelift::Cranelift;
-use wasmer_engine_universal::Universal;
 
 // First we need to create an error type that we'll use to signal the end of execution.
 #[derive(Debug, Clone, Copy)]
@@ -55,7 +55,7 @@ fn main() -> anyhow::Result<()> {
     // Note that we don't need to specify the engine/compiler if we want to use
     // the default provided by Wasmer.
     // You can use `Store::default()` for that.
-    let store = Store::new(&Universal::new(Cranelift::default()).engine());
+    let store = Store::new_with_engine(&Universal::new(Cranelift::default()).engine());
 
     println!("Compiling module...");
     // Let's compile the Wasm module.
@@ -82,7 +82,7 @@ fn main() -> anyhow::Result<()> {
     //
     // Get the `run` function which we'll use as our entrypoint.
     println!("Calling `run` function...");
-    let run_func: NativeFunc<(i32, i32), i32> = instance.exports.get_native_function("run")?;
+    let run_func: TypedFunction<(i32, i32), i32> = instance.exports.get_native_function("run")?;
 
     // When we call a function it can either succeed or fail. We expect it to fail.
     match run_func.call(1, 7) {

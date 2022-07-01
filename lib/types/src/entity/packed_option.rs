@@ -101,9 +101,9 @@ impl<T: ReservedValue> From<Option<T>> for PackedOption<T> {
     }
 }
 
-impl<T: ReservedValue> Into<Option<T>> for PackedOption<T> {
-    fn into(self) -> Option<T> {
-        self.expand()
+impl<T: ReservedValue> From<PackedOption<T>> for Option<T> {
+    fn from(other: PackedOption<T>) -> Self {
+        other.expand()
     }
 }
 
@@ -130,7 +130,7 @@ mod tests {
 
     impl ReservedValue for NoC {
         fn reserved_value() -> Self {
-            NoC(13)
+            Self(13)
         }
 
         fn is_reserved_value(&self) -> bool {
@@ -156,7 +156,7 @@ mod tests {
 
     impl ReservedValue for Ent {
         fn reserved_value() -> Self {
-            Ent(13)
+            Self(13)
         }
 
         fn is_reserved_value(&self) -> bool {

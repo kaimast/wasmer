@@ -1,18 +1,17 @@
 //! This module mainly outputs the `Compiler` trait that custom
 //! compilers will need to implement.
 
-use crate::error::CompileError;
-use crate::function::Compilation;
 use crate::lib::std::boxed::Box;
 use crate::lib::std::sync::Arc;
-use crate::module::CompileModuleInfo;
 use crate::target::Target;
 use crate::translator::ModuleMiddleware;
 use crate::FunctionBodyData;
 use crate::ModuleTranslationState;
-use crate::SectionIndex;
-use loupe::MemoryUsage;
+use wasmer_types::compilation::function::Compilation;
+use wasmer_types::compilation::module::CompileModuleInfo;
 use wasmer_types::entity::PrimaryMap;
+use wasmer_types::error::CompileError;
+use wasmer_types::SectionIndex;
 use wasmer_types::{Features, FunctionIndex, LocalFunctionIndex, SignatureIndex};
 use wasmparser::{Validator, WasmFeatures};
 
@@ -78,7 +77,7 @@ where
 }
 
 /// An implementation of a Compiler from parsed WebAssembly module to Compiled native code.
-pub trait Compiler: Send + MemoryUsage {
+pub trait Compiler: Send {
     /// Validates a module.
     ///
     /// It returns the a succesful Result in case is valid, `CompileError` in case is not.
@@ -100,6 +99,11 @@ pub trait Compiler: Send + MemoryUsage {
             memory64: features.memory64,
             exceptions: features.exceptions,
             deterministic_only: false,
+            extended_const: features.extended_const,
+            relaxed_simd: features.relaxed_simd,
+            mutable_global: true,
+            saturating_float_to_int: true,
+            sign_extension: true,
         };
         validator.wasm_features(wasm_features);
         validator

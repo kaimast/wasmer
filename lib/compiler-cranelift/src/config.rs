@@ -1,7 +1,7 @@
 use crate::compiler::CraneliftCompiler;
 use cranelift_codegen::isa::{lookup, TargetIsa};
 use cranelift_codegen::settings::{self, Configurable};
-use loupe::MemoryUsage;
+use cranelift_codegen::CodegenResult;
 use std::sync::Arc;
 use wasmer_compiler::{
     Architecture, Compiler, CompilerConfig, CpuFeature, ModuleMiddleware, Target,
@@ -11,7 +11,7 @@ use wasmer_compiler::{
 
 /// Possible optimization levels for the Cranelift codegen backend.
 #[non_exhaustive]
-#[derive(Clone, Debug, MemoryUsage)]
+#[derive(Clone, Debug)]
 pub enum CraneliftOptLevel {
     /// No optimizations performed, minimizes compilation time by disabling most
     /// optimizations.
@@ -28,7 +28,7 @@ pub enum CraneliftOptLevel {
 ///
 /// This structure exposes a builder-like interface and is primarily
 /// consumed by `wasmer_engine::Engine::new`.
-#[derive(Debug, Clone, MemoryUsage)]
+#[derive(Debug, Clone)]
 pub struct Cranelift {
     enable_nan_canonicalization: bool,
     enable_verifier: bool,
@@ -67,7 +67,7 @@ impl Cranelift {
     }
 
     /// Generates the ISA for the provided target
-    pub fn isa(&self, target: &Target) -> Box<dyn TargetIsa> {
+    pub fn isa(&self, target: &Target) -> CodegenResult<Box<dyn TargetIsa>> {
         let mut builder =
             lookup(target.triple().clone()).expect("construct Cranelift ISA for triple");
         // Cpu Features
@@ -134,6 +134,12 @@ impl Cranelift {
         if self.enable_pic {
             flags.enable("is_pic").expect("should be a valid flag");
         }
+
+        // We set up libcall trampolines in engine-universal.
+        // These trampolines are always reachable through short jumps.
+        flags
+            .enable("use_colocated_libcalls")
+            .expect("should be a valid flag");
 
         // Invert cranelift's default-on verification to instead default off.
         let enable_verifier = if self.enable_verifier {

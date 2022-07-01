@@ -1,14 +1,14 @@
-use crate::sys::exports::Exports;
+use crate::sys::exports::{Exports, Exportable};
 use crate::sys::externals::Extern;
+use crate::sys::imports::Imports;
 use crate::sys::module::Module;
 use crate::sys::store::Store;
 use crate::sys::{HostEnvInitError, LinkError, RuntimeError};
-use loupe::MemoryUsage;
 use std::fmt;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
-use wasmer_engine::Resolver;
 use wasmer_vm::{InstanceHandle, VMContext};
+use wasmer_compiler::resolve_imports;
 
 /// A WebAssembly Instance is a stateful, executable
 /// instance of a WebAssembly [`Module`].
@@ -18,10 +18,12 @@ use wasmer_vm::{InstanceHandle, VMContext};
 /// interacting with WebAssembly.
 ///
 /// Spec: <https://webassembly.github.io/spec/core/exec/runtime.html#module-instances>
-#[derive(Clone, MemoryUsage)]
+#[derive(Clone)]
 pub struct Instance {
     handle: Arc<Mutex<InstanceHandle>>,
     module: Module,
+    #[allow(dead_code)]
+    imports: Vec<Extern>,
     /// The exports for an instance.
     pub exports: Exports,
 }
@@ -68,12 +70,12 @@ pub enum InstantiationError {
     HostEnvInitialization(HostEnvInitError),
 }
 
-impl From<wasmer_engine::InstantiationError> for InstantiationError {
-    fn from(other: wasmer_engine::InstantiationError) -> Self {
+impl From<wasmer_compiler::InstantiationError> for InstantiationError {
+    fn from(other: wasmer_compiler::InstantiationError) -> Self {
         match other {
-            wasmer_engine::InstantiationError::Link(e) => Self::Link(e),
-            wasmer_engine::InstantiationError::Start(e) => Self::Start(e),
-            wasmer_engine::InstantiationError::CpuFeature(e) => Self::CpuFeature(e),
+            wasmer_compiler::InstantiationError::Link(e) => Self::Link(e),
+            wasmer_compiler::InstantiationError::Start(e) => Self::Start(e),
+            wasmer_compiler::InstantiationError::CpuFeature(e) => Self::CpuFeature(e),
         }
     }
 }
@@ -86,15 +88,10 @@ impl From<HostEnvInitError> for InstantiationError {
 
 impl Instance {
     /// Creates a new `Instance` from a WebAssembly [`Module`] and a
-    /// set of imports resolved by the [`Resolver`].
+    /// set of imports using [`Imports`] or the [`imports`] macro helper.
     ///
-    /// The resolver can be anything that implements the [`Resolver`] trait,
-    /// so you can plug custom resolution for the imports, if you wish not
-    /// to use [`ImportObject`].
-    ///
-    /// The [`ImportObject`] is the easiest way to provide imports to the instance.
-    ///
-    /// [`ImportObject`]: crate::ImportObject
+    /// [`imports`]: crate::imports
+    /// [`Imports`]: crate::Imports
     ///
     /// ```
     /// # use wasmer::{imports, Store, Module, Global, Value, Instance};
@@ -118,14 +115,12 @@ impl Instance {
     /// Those are, as defined by the spec:
     ///  * Link errors that happen when plugging the imports into the instance
     ///  * Runtime errors that happen when running the module `start` function.
-    #[ tracing::instrument(skip(resolver)) ]
-    pub fn new(
-        module: &Module,
-        resolver: &(dyn Resolver + Send + Sync),
-    ) -> Result<Self, InstantiationError> {
+    pub fn new(module: &Module, imports: &Imports) -> Result<Self, InstantiationError> {
         let store = module.store();
-        let handle = module.instantiate(resolver)?;
-
+        let imports = imports
+            .imports_for_module(module)
+            .map_err(InstantiationError::Link)?;
+        let handle = module.instantiate(&imports)?;
         let exports = module
             .exports()
             .map(|export| {
@@ -139,6 +134,57 @@ impl Instance {
         let instance = Self {
             handle: Arc::new(Mutex::new(handle)),
             module: module.clone(),
+            imports,
+            exports,
+        };
+
+        // # Safety
+        // `initialize_host_envs` should be called after instantiation but before
+        // returning an `Instance` to the user. We set up the host environments
+        // via `WasmerEnv::init_with_instance`.
+        //
+        // This usage is correct because we pass a valid pointer to `instance` and the
+        // correct error type returned by `WasmerEnv::init_with_instance` as a generic
+        // parameter.
+        unsafe {
+            instance
+                .handle
+                .lock()
+                .unwrap()
+                .initialize_host_envs::<HostEnvInitError>(&instance as *const _ as *const _)?;
+        }
+
+        Ok(instance)
+    }
+
+    /// Creates a new `Instance` from a WebAssembly [`Module`] and a
+    /// vector of imports.
+    ///
+    /// ## Errors
+    ///
+    /// The function can return [`InstantiationError`]s.
+    ///
+    /// Those are, as defined by the spec:
+    ///  * Link errors that happen when plugging the imports into the instance
+    ///  * Runtime errors that happen when running the module `start` function.
+    pub fn new_by_index(module: &Module, externs: &[Extern]) -> Result<Self, InstantiationError> {
+        let store = module.store();
+        let imports = externs.to_vec();
+        let handle = module.instantiate(&imports)?;
+        let exports = module
+            .exports()
+            .map(|export| {
+                let name = export.name().to_string();
+                let export = handle.lookup(&name).expect("export");
+                let extern_ = Extern::from_vm_export(store, export.into());
+                (name, extern_)
+            })
+            .collect::<Exports>();
+
+        let instance = Self {
+            handle: Arc::new(Mutex::new(handle)),
+            module: module.clone(),
+            imports,
             exports,
         };
 
@@ -239,16 +285,26 @@ impl Instance {
     }
 
     /// Duplicate the entire state of this instance and create a new one
-    #[ tracing::instrument(skip(resolver)) ]
-    pub unsafe fn duplicate(&self, resolver: &dyn Resolver) -> Result<Self, InstantiationError> {
+    #[ tracing::instrument(skip(imports)) ]
+    pub unsafe fn duplicate(&self, imports: &Imports) -> Result<Self, InstantiationError> {
         let artifact = self.module().artifact();
         let module = self.module().clone();
+
+        let imports = imports
+            .imports_for_module(&module)
+            .map_err(InstantiationError::Link)?;
 
         let instance_handle = {
             let old_handle = self.handle.lock().unwrap();
             //FIXME we only need to update the Envs. Do we really need to redo all of this?
-            let imports = wasmer_engine::resolve_imports(module.info(),
-                resolver, artifact.finished_dynamic_function_trampolines(),
+
+            let imports = imports.iter()
+                .map(crate::Extern::to_export)
+                .collect::<Vec<_>>();
+
+            let imports = resolve_imports(module.info(),
+                imports.as_slice(),
+                artifact.finished_dynamic_function_trampolines(),
                 artifact.memory_styles(), artifact.table_styles()
             ).unwrap();
 
@@ -268,6 +324,7 @@ impl Instance {
         let instance = Self {
             handle: Arc::new(Mutex::new(instance_handle)),
             module, exports,
+            imports,
         };
 
         {

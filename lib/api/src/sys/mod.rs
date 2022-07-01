@@ -1,16 +1,15 @@
-mod cell;
 mod env;
 mod exports;
 mod externals;
-mod import_object;
+mod imports;
 mod instance;
+mod mem_access;
 mod module;
 mod native;
 mod ptr;
 mod store;
 mod tunables;
 mod types;
-mod utils;
 
 /// Implement [`WasmerEnv`] for your type with `#[derive(WasmerEnv)]`.
 ///
@@ -27,7 +26,6 @@ pub mod internals {
     pub use crate::sys::externals::{WithEnv, WithoutEnv};
 }
 
-pub use crate::sys::cell::WasmCell;
 pub use crate::sys::env::{HostEnvInitError, LazyInit, WasmerEnv};
 pub use crate::sys::exports::{ExportError, Exportable, Exports, ExportsIterator};
 pub use crate::sys::externals::{
@@ -35,11 +33,13 @@ pub use crate::sys::externals::{
 };
 #[cfg(feature="async")] pub use crate::sys::externals::Yielder;
 
-pub use crate::sys::import_object::{ImportObject, ImportObjectIterator, LikeNamespace};
+pub use crate::sys::imports::Imports;
 pub use crate::sys::instance::{Instance, InstantiationError};
+pub use crate::sys::mem_access::{MemoryAccessError, WasmRef, WasmSlice, WasmSliceIter};
 pub use crate::sys::module::Module;
-pub use crate::sys::native::NativeFunc;
-pub use crate::sys::ptr::{Array, Item, WasmPtr};
+pub use crate::sys::native::TypedFunction;
+
+pub use crate::sys::ptr::{Memory32, Memory64, MemorySize, WasmPtr, WasmPtr64};
 pub use crate::sys::store::{Store, StoreObject};
 pub use crate::sys::tunables::BaseTunables;
 pub use crate::sys::types::{
@@ -47,24 +47,21 @@ pub use crate::sys::types::{
     TableType, Val, ValType,
 };
 pub use crate::sys::types::{Val as Value, ValType as Type};
-pub use crate::sys::utils::is_wasm;
 pub use target_lexicon::{Architecture, CallingConvention, OperatingSystem, Triple, HOST};
 #[cfg(feature = "compiler")]
 pub use wasmer_compiler::{
-    wasmparser, CompilerConfig, FunctionMiddleware, MiddlewareError, MiddlewareReaderState,
-    ModuleMiddleware,
+    wasmparser, CompilerConfig, FunctionMiddleware, MiddlewareReaderState, ModuleMiddleware,
 };
 pub use wasmer_compiler::{
-    CompileError, CpuFeature, Features, ParseCpuFeatureError, Target, WasmError, WasmResult,
+    CpuFeature, Engine, Export, Features, FrameInfo, LinkError, RuntimeError, Target, Tunables,
 };
-pub use wasmer_engine::{
-    ChainableNamedResolver, DeserializeError, Engine, Export, FrameInfo, LinkError, NamedResolver,
-    NamedResolverChain, Resolver, RuntimeError, SerializeError, Tunables,
-};
+pub use wasmer_derive::ValueType;
+pub use wasmer_types::is_wasm;
 #[cfg(feature = "experimental-reference-types-extern-ref")]
 pub use wasmer_types::ExternRef;
 pub use wasmer_types::{
-    Atomically, Bytes, ExportIndex, GlobalInit, LocalFunctionIndex, MemoryView, Pages, ValueType,
+    Bytes, CompileError, DeserializeError, ExportIndex, GlobalInit, LocalFunctionIndex,
+    MiddlewareError, Pages, ParseCpuFeatureError, SerializeError, ValueType, WasmError, WasmResult,
     WASM_MAX_PAGES, WASM_MIN_PAGES, WASM_PAGE_SIZE,
 };
 
@@ -98,7 +95,7 @@ If you wish to use more than one compiler, you can simply create the own store. 
 use wasmer::{Store, Universal, Singlepass};
 
 let engine = Universal::new(Singlepass::default()).engine();
-let store = Store::new(&engine);
+let store = Store::new_with_engine(&engine);
 ```"#
 );
 
@@ -112,10 +109,7 @@ pub use wasmer_compiler_cranelift::{Cranelift, CraneliftOptLevel};
 pub use wasmer_compiler_llvm::{LLVMOptLevel, LLVM};
 
 #[cfg(feature = "universal")]
-pub use wasmer_engine_universal::{Universal, UniversalArtifact, UniversalEngine};
-
-#[cfg(feature = "dylib")]
-pub use wasmer_engine_dylib::{Dylib, DylibArtifact, DylibEngine};
+pub use wasmer_compiler::{Universal, UniversalArtifact, UniversalEngine};
 
 /// Version number of this crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -125,7 +119,9 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[deprecated(since = "2.0.0", note = "Please use the `universal` feature instead")]
 pub type JIT = Universal;
 
-/// The Deprecated Native Engine (please use `Dylib` instead)
-#[cfg(feature = "native")]
-#[deprecated(since = "2.0.0", note = "Please use the `native` feature instead")]
-pub type Native = Dylib;
+/// This type is deprecated, it has been replaced by TypedFunction.
+#[deprecated(
+    since = "3.0.0",
+    note = "NativeFunc has been replaced by TypedFunction"
+)]
+pub type NativeFunc<Args = (), Rets = ()> = TypedFunction<Args, Rets>;

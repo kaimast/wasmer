@@ -4,12 +4,12 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::num::TryFromIntError;
 
-use wasmer_compiler::{
+use wasmer_types::entity::PrimaryMap;
+use wasmer_types::{
     CompileError, CompiledFunctionFrameInfo, CustomSection, CustomSectionProtection,
     CustomSections, FunctionAddressMap, FunctionBody, InstructionAddressMap, Relocation,
     RelocationKind, RelocationTarget, SectionBody, SectionIndex, SourceLoc,
 };
-use wasmer_types::entity::{PrimaryMap, SecondaryMap};
 use wasmer_vm::libcalls::LibCall;
 
 fn map_tryfromint_err(error: TryFromIntError) -> CompileError {
@@ -21,7 +21,7 @@ fn map_object_err(error: object::read::Error) -> CompileError {
 }
 
 pub struct CompiledFunction {
-    pub compiled_function: wasmer_compiler::CompiledFunction,
+    pub compiled_function: wasmer_types::CompiledFunction,
     pub custom_sections: CustomSections,
     pub eh_frame_section_indices: Vec<SectionIndex>,
 }
@@ -96,7 +96,6 @@ where
     libcalls.insert("wasmer_vm_memory32_init".to_string(), LibCall::Memory32Init);
     libcalls.insert("wasmer_vm_data_drop".to_string(), LibCall::DataDrop);
     libcalls.insert("wasmer_vm_raise_trap".to_string(), LibCall::RaiseTrap);
-    libcalls.insert("wasmer_vm_probestack".to_string(), LibCall::Probestack);
 
     let elf = object::File::parse(contents).map_err(map_object_err)?;
 
@@ -163,24 +162,16 @@ where
             .map_err(map_object_err)?
             .relocations()
         {
-            let kind = match (reloc.kind(), reloc.size()) {
-                (object::RelocationKind::Absolute, 64) => RelocationKind::Abs8,
-                (object::RelocationKind::Elf(object::elf::R_X86_64_PC64), 0) => {
-                    RelocationKind::X86PCRel8
+            let kind = match (elf.architecture(), reloc.kind(), reloc.size()) {
+                (_, object::RelocationKind::Absolute, 64) => RelocationKind::Abs8,
+                (
+                    object::Architecture::X86_64,
+                    object::RelocationKind::Elf(object::elf::R_X86_64_PC64),
+                    0,
+                ) => RelocationKind::X86PCRel8,
+                (object::Architecture::Aarch64, object::RelocationKind::PltRelative, 26) => {
+                    RelocationKind::Arm64Call
                 }
-                (object::RelocationKind::Elf(object::elf::R_AARCH64_MOVW_UABS_G0_NC), 0) => {
-                    RelocationKind::Arm64Movw0
-                }
-                (object::RelocationKind::Elf(object::elf::R_AARCH64_MOVW_UABS_G1_NC), 0) => {
-                    RelocationKind::Arm64Movw1
-                }
-                (object::RelocationKind::Elf(object::elf::R_AARCH64_MOVW_UABS_G2_NC), 0) => {
-                    RelocationKind::Arm64Movw2
-                }
-                (object::RelocationKind::Elf(object::elf::R_AARCH64_MOVW_UABS_G3), 0) => {
-                    RelocationKind::Arm64Movw3
-                }
-                (object::RelocationKind::PltRelative, 26) => RelocationKind::Arm64Call,
                 _ => {
                     return Err(CompileError::Codegen(format!(
                         "unknown relocation {:?}",
@@ -338,9 +329,8 @@ where
     };
 
     Ok(CompiledFunction {
-        compiled_function: wasmer_compiler::CompiledFunction {
+        compiled_function: wasmer_types::CompiledFunction {
             body: function_body,
-            jt_offsets: SecondaryMap::new(),
             relocations: relocations
                 .remove_entry(&root_section_index)
                 .map_or(vec![], |(_, v)| v),

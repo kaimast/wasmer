@@ -1,6 +1,6 @@
 use wasmer::{imports, wat2wasm, Function, Instance, LazyInit, Module, Store, WasmerEnv, Yielder};
 use wasmer_compiler_cranelift::Cranelift;
-use wasmer_engine_universal::Universal;
+use wasmer_compiler::Universal;
 
 use async_wormhole::stack::{EightMbStack, Stack};
 
@@ -29,7 +29,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Note that we don't need to specify the engine/compiler if we want to use
     // the default provided by Wasmer.
     // You can use `Store::default()` for that.
-    let store = Store::new(&Universal::new(Cranelift::default()).engine());
+    let compiler = Cranelift::default();
+    let store = Store::new_with_engine(&Universal::new(compiler).engine());
 
     println!("Compiling module...");
     // Let's compile the Wasm module.
@@ -42,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let result = yielder.async_suspend(async move { 52 * a });
 
-        println!("Result of `my_async_fn`: {:?}", result);
+        println!("Result of `my_async_fn`: {result:?}");
 
         result
     }

@@ -1,8 +1,8 @@
 use wasmer::{
-    imports, wat2wasm, Function, Instance, Module, NativeFunc, Store, TableType, Type, Value,
+    imports, wat2wasm, Function, Instance, Module, Store, TableType, Type, TypedFunction, Value,
 };
+use wasmer_compiler::Universal;
 use wasmer_compiler_cranelift::Cranelift;
-use wasmer_engine_universal::Universal;
 
 /// A function we'll call through a table.
 fn host_callback(arg1: i32, arg2: i32) -> i32 {
@@ -51,7 +51,7 @@ fn main() -> anyhow::Result<()> {
     )?;
 
     // We set up our store with an engine and a compiler.
-    let store = Store::new(&Universal::new(Cranelift::default()).engine());
+    let store = Store::new_with_engine(&Universal::new(Cranelift::default()).engine());
     // Then compile our Wasm.
     let module = Module::new(&store, wasm_bytes)?;
     let import_object = imports! {};
@@ -61,7 +61,7 @@ fn main() -> anyhow::Result<()> {
     // We get our function that calls (i32, i32) -> i32 functions via table.
     // The first argument is the table index and the next 2 are the 2 arguments
     // to be passed to the function found in the table.
-    let call_via_table: NativeFunc<(i32, i32, i32), i32> =
+    let call_via_table: TypedFunction<(i32, i32, i32), i32> =
         instance.exports.get_native_function("call_callback")?;
 
     // And then call it with table index 1 and arguments 2 and 7.

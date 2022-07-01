@@ -1,10 +1,8 @@
 use crate::sys::{MemoryType, Pages, TableType};
-use loupe::MemoryUsage;
 use std::ptr::NonNull;
 use std::sync::Arc;
 use target_lexicon::PointerWidth;
-use wasmer_compiler::Target;
-use wasmer_engine::Tunables;
+use wasmer_compiler::{Target, Tunables};
 use wasmer_vm::MemoryError;
 use wasmer_vm::{
     LinearMemory, LinearTable, Memory, MemoryStyle, Table, TableStyle, VMMemoryDefinition,
@@ -19,7 +17,7 @@ use wasmer_vm::{
 /// implementation or use composition to wrap your Tunables around
 /// this one. The later approach is demonstrated in the
 /// tunables-limit-memory example.
-#[derive(Clone, MemoryUsage)]
+#[derive(Clone)]
 pub struct BaseTunables {
     /// For static heaps, the size in wasm pages of the heap protected by bounds checking.
     pub static_memory_bound: Pages,
@@ -99,7 +97,7 @@ impl Tunables for BaseTunables {
         ty: &MemoryType,
         style: &MemoryStyle,
     ) -> Result<Arc<dyn Memory>, MemoryError> {
-        Ok(Arc::new(LinearMemory::new(&ty, &style)?))
+        Ok(Arc::new(LinearMemory::new(ty, style)?))
     }
 
     /// Create a memory owned by the VM given a [`MemoryType`] and a [`MemoryStyle`].
@@ -114,8 +112,8 @@ impl Tunables for BaseTunables {
         vm_definition_location: NonNull<VMMemoryDefinition>,
     ) -> Result<Arc<dyn Memory>, MemoryError> {
         Ok(Arc::new(LinearMemory::from_definition(
-            &ty,
-            &style,
+            ty,
+            style,
             vm_definition_location,
         )?))
     }
@@ -126,7 +124,7 @@ impl Tunables for BaseTunables {
         ty: &TableType,
         style: &TableStyle,
     ) -> Result<Arc<dyn Table>, String> {
-        Ok(Arc::new(LinearTable::new(&ty, &style)?))
+        Ok(Arc::new(LinearTable::new(ty, style)?))
     }
 
     /// Create a table owned by the VM given a [`TableType`] and a [`TableStyle`].
@@ -141,8 +139,8 @@ impl Tunables for BaseTunables {
         vm_definition_location: NonNull<VMTableDefinition>,
     ) -> Result<Arc<dyn Table>, String> {
         Ok(Arc::new(LinearTable::from_definition(
-            &ty,
-            &style,
+            ty,
+            style,
             vm_definition_location,
         )?))
     }

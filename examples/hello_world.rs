@@ -6,9 +6,9 @@
 //! cargo run --example hello-world --release --features "cranelift"
 //! ```
 
-use wasmer::{imports, wat2wasm, Function, Instance, Module, NativeFunc, Store};
+use wasmer::{imports, wat2wasm, Function, Instance, Module, Store, TypedFunction};
+use wasmer_compiler::Universal;
 use wasmer_compiler_cranelift::Cranelift;
-use wasmer_engine_universal::Universal;
 
 fn main() -> anyhow::Result<()> {
     // First we create a simple Wasm program to use with Wasmer.
@@ -44,7 +44,7 @@ fn main() -> anyhow::Result<()> {
     // However for the purposes of showing what's happening, we create a compiler
     // (`Cranelift`) and pass it to an engine (`Universal`). We then pass the engine to
     // the store and are now ready to compile and run WebAssembly!
-    let store = Store::new(&Universal::new(Cranelift::default()).engine());
+    let store = Store::new_with_engine(&Universal::new(Cranelift::default()).engine());
 
     // We then use our store and Wasm bytes to compile a `Module`.
     // A `Module` is a compiled WebAssembly module that isn't ready to execute yet.
@@ -73,11 +73,11 @@ fn main() -> anyhow::Result<()> {
     // and is ready to execute.
     let instance = Instance::new(&module, &import_object)?;
 
-    // We get the `NativeFunc` with no parameters and no results from the instance.
+    // We get the `TypedFunction` with no parameters and no results from the instance.
     //
     // Recall that the Wasm module exported a function named "run", this is getting
     // that exported function from the `Instance`.
-    let run_func: NativeFunc<(), ()> = instance.exports.get_native_function("run")?;
+    let run_func: TypedFunction<(), ()> = instance.exports.get_native_function("run")?;
 
     // Finally, we call our exported Wasm function which will call our "say_hello"
     // function and return.

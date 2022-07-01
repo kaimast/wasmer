@@ -3,22 +3,19 @@
 
 //! A trampoline generator for calling dynamic host functions from Wasm.
 
-use super::binemit::TrampolineRelocSink;
 use crate::translator::{compiled_function_unwind_info, signature_to_cranelift_ir};
+use cranelift_codegen::ir;
 use cranelift_codegen::ir::{
     ExternalName, Function, InstBuilder, MemFlags, StackSlotData, StackSlotKind,
 };
 use cranelift_codegen::isa::TargetIsa;
 use cranelift_codegen::print_errors::pretty_error;
 use cranelift_codegen::Context;
-use cranelift_codegen::{binemit, ir};
 use std::cmp;
 use std::mem;
 
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
-use wasmer_compiler::{CompileError, FunctionBody};
-use wasmer_types::FunctionType;
-use wasmer_vm::VMOffsets;
+use wasmer_types::{CompileError, FunctionBody, FunctionType, VMOffsets};
 
 /// Create a trampoline for invoking a WebAssembly function.
 pub fn make_trampoline_dynamic_function(
@@ -108,18 +105,9 @@ pub fn make_trampoline_dynamic_function(
     }
 
     let mut code_buf = Vec::new();
-    let mut reloc_sink = TrampolineRelocSink {};
-    let mut trap_sink = binemit::NullTrapSink {};
-    let mut stackmap_sink = binemit::NullStackMapSink {};
     context
-        .compile_and_emit(
-            isa,
-            &mut code_buf,
-            &mut reloc_sink,
-            &mut trap_sink,
-            &mut stackmap_sink,
-        )
-        .map_err(|error| CompileError::Codegen(pretty_error(&context.func, Some(isa), error)))?;
+        .compile_and_emit(isa, &mut code_buf)
+        .map_err(|error| CompileError::Codegen(pretty_error(&context.func, error)))?;
 
     let unwind_info = compiled_function_unwind_info(isa, &context)?.maybe_into_to_windows_unwind();
 

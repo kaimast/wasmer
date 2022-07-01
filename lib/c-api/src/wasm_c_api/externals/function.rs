@@ -6,7 +6,7 @@ use super::CApiExternTag;
 use std::convert::TryInto;
 use std::ffi::c_void;
 use std::mem::MaybeUninit;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use wasmer_api::{Function, RuntimeError, Val};
 
 #[derive(Debug, Clone)]
@@ -56,7 +56,7 @@ pub unsafe extern "C" fn wasm_func_new(
     let num_rets = func_sig.results().len();
     let inner_callback = move |args: &[Val]| -> Result<Vec<Val>, RuntimeError> {
         let processed_args: wasm_val_vec_t = args
-            .into_iter()
+            .iter()
             .map(TryInto::try_into)
             .collect::<Result<Vec<wasm_val_t>, _>>()
             .expect("Argument conversion failed")
@@ -110,7 +110,7 @@ pub unsafe extern "C" fn wasm_func_new_with_env(
     #[repr(C)]
     struct WrapperEnv {
         env: *mut c_void,
-        env_finalizer: Arc<Option<wasm_env_finalizer_t>>,
+        env_finalizer: Arc<Mutex<Option<wasm_env_finalizer_t>>>,
     }
 
     impl wasmer_api::WasmerEnv for WrapperEnv {}
@@ -122,15 +122,19 @@ pub unsafe extern "C" fn wasm_func_new_with_env(
 
     impl Drop for WrapperEnv {
         fn drop(&mut self) {
-            if let Some(env_finalizer) = *self.env_finalizer {
-                unsafe { (env_finalizer)(self.env as _) }
+            if let Ok(mut guard) = self.env_finalizer.lock() {
+                if Arc::strong_count(&self.env_finalizer) == 1 {
+                    if let Some(env_finalizer) = guard.take() {
+                        unsafe { (env_finalizer)(self.env as _) };
+                    }
+                }
             }
         }
     }
 
     let trampoline = move |env: &WrapperEnv, args: &[Val]| -> Result<Vec<Val>, RuntimeError> {
         let processed_args: wasm_val_vec_t = args
-            .into_iter()
+            .iter()
             .map(TryInto::try_into)
             .collect::<Result<Vec<wasm_val_t>, _>>()
             .expect("Argument conversion failed")
@@ -166,7 +170,7 @@ pub unsafe extern "C" fn wasm_func_new_with_env(
         func_sig,
         WrapperEnv {
             env,
-            env_finalizer: Arc::new(env_finalizer),
+            env_finalizer: Arc::new(Mutex::new(env_finalizer)),
         },
         trampoline,
     );
@@ -204,7 +208,7 @@ pub unsafe extern "C" fn wasm_func_call(
             for (slot, val) in results
                 .as_uninit_slice()
                 .iter_mut()
-                .zip(wasm_results.into_iter())
+                .zip(wasm_results.iter())
             {
                 *slot = MaybeUninit::new(val.try_into().expect("Results conversion failed"));
             }

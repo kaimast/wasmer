@@ -6,12 +6,12 @@
     missing_docs,
     trivial_numeric_casts,
     unused_extern_crates,
-    broken_intra_doc_links
+    rustdoc::broken_intra_doc_links
 )]
 #![warn(unused_import_braces)]
 #![cfg_attr(
     feature = "cargo-clippy",
-    allow(clippy::new_without_default, vtable_address_comparisons)
+    allow(clippy::new_without_default, clippy::vtable_address_comparisons)
 )]
 #![cfg_attr(
     feature = "cargo-clippy",
@@ -19,8 +19,7 @@
         clippy::float_arithmetic,
         clippy::mut_mut,
         clippy::nonminimal_bool,
-        clippy::option_map_unwrap_or,
-        clippy::option_map_unwrap_or_else,
+        clippy::map_unwrap_or,
         clippy::print_stdout,
         clippy::unicode_not_nfc,
         clippy::use_self
@@ -78,12 +77,6 @@
 //!   compilation process and to store the generated executable code
 //!   somewhere, either:
 //!   * in-memory (with [`wasmer-engine-universal`]),
-//!   * in a native shared object file (with [`wasmer-engine-dylib`],
-//!     `.dylib`, `.so`, `.dll`), then load it with `dlopen`,
-//!   * in a native static object file (with [`wasmer-engine-staticlib`]),
-//!     in addition to emitting a C header file, which both can be linked
-//!     against a sandboxed WebAssembly runtime environment for the
-//!     compiled module with no need for runtime compilation.
 //!
 //! * **Pluggable compilers** — A compiler is used by an engine to
 //!   transform WebAssembly into executable code:
@@ -157,8 +150,8 @@
 //! [`imports`] macro:
 //!
 //! ```
-//! # use wasmer::{imports, Function, Memory, MemoryType, Store, ImportObject};
-//! # fn imports_example(store: &Store) -> ImportObject {
+//! # use wasmer::{imports, Function, Memory, MemoryType, Store, Imports};
+//! # fn imports_example(store: &Store) -> Imports {
 //! let memory = Memory::new(&store, MemoryType::new(1, None, false)).unwrap();
 //! imports! {
 //!     "env" => {
@@ -173,11 +166,11 @@
 //! from any instance via `instance.exports`:
 //!
 //! ```
-//! # use wasmer::{imports, Instance, Function, Memory, NativeFunc};
+//! # use wasmer::{imports, Instance, Function, Memory, TypedFunction};
 //! # fn exports_example(instance: &Instance) -> anyhow::Result<()> {
 //! let memory = instance.exports.get_memory("memory")?;
 //! let memory: &Memory = instance.exports.get("some_other_memory")?;
-//! let add: NativeFunc<(i32, i32), i32> = instance.exports.get_native_function("add")?;
+//! let add: TypedFunction<(i32, i32), i32> = instance.exports.get_native_function("add")?;
 //! let result = add.call(5, 37)?;
 //! assert_eq!(result, 42);
 //! # Ok(())
@@ -216,7 +209,7 @@
 //!
 //! In the `wasmer` API we support functions which take their arguments and
 //! return their results dynamically, [`Function`], and functions which
-//! take their arguments and return their results statically, [`NativeFunc`].
+//! take their arguments and return their results statically, [`TypedFunction`].
 //!
 //! ### Memories
 //!
@@ -325,11 +318,7 @@
 //! - `universal`
 #![cfg_attr(feature = "universal", doc = "(enabled),")]
 #![cfg_attr(not(feature = "universal"), doc = "(disabled),")]
-//!   enables [the Universal engine][`wasmer-engine-universal`],
-//! - `dylib`
-#![cfg_attr(feature = "dylib", doc = "(enabled),")]
-#![cfg_attr(not(feature = "dylib"), doc = "(disabled),")]
-//!   enables [the Dylib engine][`wasmer-engine-dylib`].
+//!   enables [the Universal engine][`wasmer-engine-universal`].
 //!
 //! The features that set defaults come in sets that are mutually exclusive.
 //!
@@ -351,11 +340,7 @@
 //! - `default-universal`
 #![cfg_attr(feature = "default-universal", doc = "(enabled),")]
 #![cfg_attr(not(feature = "default-universal"), doc = "(disabled),")]
-//!   set the Universal engine as the default,
-//! - `default-dylib`
-#![cfg_attr(feature = "default-dylib", doc = "(enabled),")]
-#![cfg_attr(not(feature = "default-dylib"), doc = "(disabled),")]
-//!   set the Dylib engine as the default.
+//!   set the Universal engine as the default.
 //!
 #![cfg_attr(
     feature = "js",
@@ -435,8 +420,6 @@
 //! [`wasmer-emscripten`]: https://docs.rs/wasmer-emscripten/
 //! [wasmer-engine]: https://docs.rs/wasmer-engine/
 //! [`wasmer-engine-universal`]: https://docs.rs/wasmer-engine-universal/
-//! [`wasmer-engine-dylib`]: https://docs.rs/wasmer-engine-dylib/
-//! [`wasmer-engine-staticlib`]: https://docs.rs/wasmer-engine-staticlib/
 //! [`wasmer-compiler-singlepass`]: https://docs.rs/wasmer-compiler-singlepass/
 //! [`wasmer-compiler-llvm`]: https://docs.rs/wasmer-compiler-llvm/
 //! [`wasmer-compiler-cranelift`]: https://docs.rs/wasmer-compiler-cranelift/

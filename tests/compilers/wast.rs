@@ -42,16 +42,6 @@ pub fn run_wast(mut config: crate::Config, wast_path: &str) -> anyhow::Result<()
     wast.allow_trap_message("uninitialized element 2", "uninitialized element");
     // `liking.wast` has different wording but the same meaning
     wast.allow_trap_message("out of bounds memory access", "memory out of bounds");
-    if config.compiler == crate::Compiler::Cranelift && config.engine == crate::Engine::Dylib {
-        wast.allow_trap_message("call stack exhausted", "out of bounds memory access");
-        wast.allow_trap_message("indirect call type mismatch", "call stack exhausted");
-        wast.allow_trap_message("integer divide by zero", "call stack exhausted");
-        wast.allow_trap_message("integer overflow", "call stack exhausted");
-        wast.allow_trap_message("invalid conversion to integer", "call stack exhausted");
-        wast.allow_trap_message("undefined element", "call stack exhausted");
-        wast.allow_trap_message("uninitialized element", "call stack exhausted");
-        wast.allow_trap_message("unreachable", "call stack exhausted");
-    }
     if cfg!(feature = "coverage") {
         wast.disable_assert_and_exhaustion();
     }
@@ -67,7 +57,7 @@ pub fn run_wast(mut config: crate::Config, wast_path: &str) -> anyhow::Result<()
         // We don't support multivalue yet in singlepass
         wast.allow_instantiation_failures(&[
             "Validation error: invalid result arity: func type returns multiple values",
-            "Validation error: blocks, loops, and ifs accept no parameters when multi-value is not enabled",
+            "Validation error: blocks, loops, and ifs may only produce a resulttype when multi-value is not enabled",
         ]);
     }
     wast.fail_fast = false;

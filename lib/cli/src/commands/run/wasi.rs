@@ -3,7 +3,7 @@ use anyhow::Result;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use wasmer::{Instance, Module, RuntimeError, Val};
-use wasmer_wasi::{get_wasi_versions, WasiError, WasiState, WasiVersion};
+use wasmer_wasi::{get_wasi_versions, is_wasix_module, WasiError, WasiState, WasiVersion};
 
 use structopt::StructOpt;
 
@@ -41,7 +41,10 @@ pub struct Wasi {
 
     /// Enable experimental IO devices
     #[cfg(feature = "experimental-io-devices")]
-    #[structopt(long = "enable-experimental-io-devices")]
+    #[cfg_attr(
+        feature = "experimental-io-devices",
+        structopt(long = "enable-experimental-io-devices")
+    )]
     enable_experimental_io_devices: bool,
 
     /// Allow WASI modules to import multiple versions of WASI without a warning.
@@ -59,14 +62,14 @@ impl Wasi {
     pub fn get_versions(module: &Module) -> Option<BTreeSet<WasiVersion>> {
         // Get the wasi version in strict mode, so no other imports are
         // allowed.
-        get_wasi_versions(&module, true)
+        get_wasi_versions(module, true)
     }
 
     /// Checks if a given module has any WASI imports at all.
     pub fn has_wasi_imports(module: &Module) -> bool {
         // Get the wasi version in non-strict mode, so no other imports
         // are allowed
-        get_wasi_versions(&module, false).is_some()
+        get_wasi_versions(module, false).is_some()
     }
 
     /// Helper function for instantiating a module with Wasi imports for the `Run` command.
@@ -94,8 +97,13 @@ impl Wasi {
         }
 
         let mut wasi_env = wasi_state_builder.finalize()?;
-        let resolver = wasi_env.import_object_for_all_wasi_versions(&module)?;
-        let instance = Instance::new(&module, &resolver)?;
+        wasi_env.state.fs.is_wasix.store(
+            is_wasix_module(module),
+            std::sync::atomic::Ordering::Release,
+        );
+
+        let import_object = wasi_env.import_object_for_all_wasi_versions(module)?;
+        let instance = Instance::new(module, &import_object)?;
         Ok(instance)
     }
 
@@ -121,7 +129,7 @@ impl Wasi {
         use std::env;
         let dir = env::var_os("WASMER_BINFMT_MISC_PREOPEN")
             .map(Into::into)
-            .unwrap_or(PathBuf::from("."));
+            .unwrap_or_else(|| PathBuf::from("."));
         Ok(Self {
             deny_multiple_wasi_versions: true,
             env_vars: env::vars().collect(),

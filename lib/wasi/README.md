@@ -66,7 +66,8 @@ let wasi_env = WasiState::new("command-name")
     .finalize()?;
 
 // Generate an `ImportObject`.
-let import_object = wasi_env.import_object(&module)?;
+let mut wasi_thread = wasi_env.new_thread();
+let import_object = wasi_thread.import_object(&module)?;
 
 // Let's instantiate the module with the imports.
 let instance = Instance::new(&module, &import_object)?;
@@ -99,5 +100,5 @@ of links that may help you:
 * [WASI C API header
   file](https://github.com/WebAssembly/wasi-libc/blob/main/libc-bottom-half/headers/public/wasi/api.h),
 * [WASI Application Binary Interface
-  (ABI)](https://github.com/WebAssembly/WASI/blob/main/design/application-abi.md),
+  (ABI)](https://github.com/WebAssembly/WASI/blob/main/legacy/application-abi.md),
   where we learn about `_start` and `_initialize` (for _reactors_) for example.

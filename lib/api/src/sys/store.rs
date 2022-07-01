@@ -1,11 +1,8 @@
 use crate::sys::tunables::BaseTunables;
-use loupe::MemoryUsage;
-use std::any::Any;
 use std::fmt;
 use std::sync::{Arc, RwLock};
-#[cfg(all(feature = "compiler", feature = "engine"))]
 use wasmer_compiler::CompilerConfig;
-use wasmer_engine::{is_wasm_pc, Engine, Tunables};
+use wasmer_compiler::{Engine, Tunables, Universal};
 use wasmer_vm::{init_traps, TrapHandler, TrapHandlerFn};
 
 /// The store represents all global state that can be manipulated by
@@ -18,17 +15,22 @@ use wasmer_vm::{init_traps, TrapHandler, TrapHandlerFn};
 /// [`Tunables`] (that are used to create the memories, tables and globals).
 ///
 /// Spec: <https://webassembly.github.io/spec/core/exec/runtime.html#store>
-#[derive(Clone, MemoryUsage)]
+#[derive(Clone)]
 pub struct Store {
     engine: Arc<dyn Engine + Send + Sync>,
     tunables: Arc<dyn Tunables + Send + Sync>,
-    #[loupe(skip)]
     trap_handler: Arc<RwLock<Option<Box<TrapHandlerFn>>>>,
 }
 
 impl Store {
+    /// Creates a new `Store` with a specific [`CompilerConfig`].
+    pub fn new(compiler_config: Box<dyn CompilerConfig>) -> Self {
+        let engine = Universal::new(compiler_config).engine();
+        Self::new_with_tunables(&engine, BaseTunables::for_target(engine.target()))
+    }
+
     /// Creates a new `Store` with a specific [`Engine`].
-    pub fn new<E>(engine: &E) -> Self
+    pub fn new_with_engine<E>(engine: &E) -> Self
     where
         E: Engine + ?Sized,
     {
@@ -48,7 +50,7 @@ impl Store {
     {
         // Make sure the signal handlers are installed.
         // This is required for handling traps.
-        init_traps(is_wasm_pc);
+        init_traps();
 
         Self {
             engine: engine.cloned(),
@@ -82,13 +84,8 @@ impl PartialEq for Store {
 }
 
 unsafe impl TrapHandler for Store {
-    #[inline]
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
     fn custom_trap_handler(&self, call: &dyn Fn(&TrapHandlerFn) -> bool) -> bool {
-        if let Some(handler) = *&self.trap_handler.read().unwrap().as_ref() {
+        if let Some(handler) = self.trap_handler.read().unwrap().as_ref() {
             call(handler)
         } else {
             false
@@ -127,10 +124,7 @@ impl Default for Store {
         fn get_engine(mut config: impl CompilerConfig + 'static) -> impl Engine + Send + Sync {
             cfg_if::cfg_if! {
                 if #[cfg(feature = "default-universal")] {
-                    wasmer_engine_universal::Universal::new(config)
-                        .engine()
-                } else if #[cfg(feature = "default-dylib")] {
-                    wasmer_engine_dylib::Dylib::new(config)
+                    wasmer_compiler::Universal::new(config)
                         .engine()
                 } else {
                     compile_error!("No default engine chosen")

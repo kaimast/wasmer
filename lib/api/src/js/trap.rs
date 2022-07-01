@@ -43,7 +43,7 @@ impl fmt::Display for RuntimeErrorSource {
         match self {
             Self::Generic(s) => write!(f, "{}", s),
             Self::User(s) => write!(f, "{}", s),
-            Self::Js(s) => write!(f, "{}", s.as_string().unwrap_or("".to_string())),
+            Self::Js(s) => write!(f, "{:?}", s),
         }
     }
 }
@@ -53,7 +53,7 @@ impl RuntimeError {
     ///
     /// # Example
     /// ```
-    /// let trap = wasmer_engine::RuntimeError::new("unexpected error");
+    /// let trap = wasmer_compiler::RuntimeError::new("unexpected error");
     /// assert_eq!("unexpected error", trap.message());
     /// ```
     pub fn new<I: Into<String>>(message: I) -> Self {

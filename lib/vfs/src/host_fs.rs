@@ -177,7 +177,11 @@ impl TryInto<Metadata> for fs::Metadata {
 pub struct FileOpener;
 
 impl crate::FileOpener for FileOpener {
-    fn open(&mut self, path: &Path, conf: &OpenOptionsConfig) -> Result<Box<dyn VirtualFile>> {
+    fn open(
+        &mut self,
+        path: &Path,
+        conf: &OpenOptionsConfig,
+    ) -> Result<Box<dyn VirtualFile + Send + Sync + 'static>> {
         // TODO: handle create implying write, etc.
         let read = conf.read();
         let write = conf.write();
@@ -193,7 +197,7 @@ impl crate::FileOpener for FileOpener {
             .map_err(Into::into)
             .map(|file| {
                 Box::new(File::new(file, path.to_owned(), read, write, append))
-                    as Box<dyn VirtualFile>
+                    as Box<dyn VirtualFile + Send + Sync + 'static>
             })
     }
 }
@@ -205,6 +209,7 @@ pub struct File {
     #[cfg_attr(feature = "enable-serde", serde(skip_serializing))]
     pub inner: fs::File,
     pub host_path: PathBuf,
+    #[cfg(feature = "enable-serde")]
     flags: u16,
 }
 
@@ -303,24 +308,25 @@ impl File {
 
     /// creates a new host file from a `std::fs::File` and a path
     pub fn new(file: fs::File, host_path: PathBuf, read: bool, write: bool, append: bool) -> Self {
-        let mut flags = 0;
+        let mut _flags = 0;
 
         if read {
-            flags |= Self::READ;
+            _flags |= Self::READ;
         }
 
         if write {
-            flags |= Self::WRITE;
+            _flags |= Self::WRITE;
         }
 
         if append {
-            flags |= Self::APPEND;
+            _flags |= Self::APPEND;
         }
 
         Self {
             inner: file,
             host_path,
-            flags,
+            #[cfg(feature = "enable-serde")]
+            _flags,
         }
     }
 

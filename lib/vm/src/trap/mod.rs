@@ -3,12 +3,15 @@
 
 //! This is the module that facilitates the usage of Traps
 //! in Wasmer Runtime
-mod trapcode;
+
+#[allow(clippy::module_inception)]
+mod trap;
 mod traphandlers;
 
-pub use trapcode::TrapCode;
+pub use trap::Trap;
 pub use traphandlers::{
-    catch_traps, catch_traps_with_result, raise_lib_trap, raise_user_trap, wasmer_call_trampoline,
-    CallThreadState, TlsRestore, Trap, TrapHandler, TrapHandlerFn,
+    catch_traps, on_host_stack, raise_lib_trap, raise_user_trap, wasmer_call_trampoline,
+    TlsRestore, TrapHandler, TrapHandlerFn,
 };
 pub use traphandlers::{init_traps, resume_panic};
+pub use wasmer_types::TrapCode;

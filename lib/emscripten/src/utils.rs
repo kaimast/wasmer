@@ -8,7 +8,7 @@ use std::mem::size_of;
 use std::os::raw::c_char;
 use std::path::PathBuf;
 use std::slice;
-use wasmer::{GlobalInit, Memory, Module, Pages};
+use wasmer::{GlobalInit, Memory, Module, Pages, WasmPtr};
 
 /// We check if a provided module is an Emscripten generated one
 pub fn is_emscripten_module(module: &Module) -> bool {
@@ -122,7 +122,9 @@ pub unsafe fn copy_cstr_into_wasm(ctx: &EmEnv, cstr: *const c_char) -> u32 {
     space_offset
 }
 
-pub unsafe fn allocate_on_stack<'a, T: Copy>(ctx: &'a EmEnv, count: u32) -> (u32, &'a mut [T]) {
+/// # Safety
+/// This method is unsafe because it operates directly with the slice of memory represented by the address
+pub unsafe fn allocate_on_stack<T: Copy>(ctx: &EmEnv, count: u32) -> (u32, &mut [T]) {
     let offset = get_emscripten_data(ctx)
         .stack_alloc_ref()
         .unwrap()
@@ -135,6 +137,8 @@ pub unsafe fn allocate_on_stack<'a, T: Copy>(ctx: &'a EmEnv, count: u32) -> (u32
     (offset, slice)
 }
 
+/// # Safety
+/// This method is unsafe because it uses `allocate_on_stack` which is unsafe
 pub unsafe fn allocate_cstr_on_stack<'a>(ctx: &'a EmEnv, s: &str) -> (u32, &'a [u8]) {
     let (offset, slice) = allocate_on_stack(ctx, (s.len() + 1) as u32);
 
@@ -214,12 +218,9 @@ pub unsafe fn copy_stat_into_wasm(ctx: &EmEnv, buf: u32, stat: &stat) {
 
 #[allow(dead_code)] // it's used in `env/windows/mod.rs`.
 pub fn read_string_from_wasm(memory: &Memory, offset: u32) -> String {
-    let v: Vec<u8> = memory.view()[(offset as usize)..]
-        .iter()
-        .map(|cell| cell.get())
-        .take_while(|&byte| byte != 0)
-        .collect();
-    String::from_utf8_lossy(&v).to_owned().to_string()
+    WasmPtr::<u8>::new(offset)
+        .read_utf8_string_with_nul(memory)
+        .unwrap()
 }
 
 /// This function trys to find an entry in mapdir

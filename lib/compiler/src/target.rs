@@ -1,13 +1,20 @@
 //! Target configuration
-use crate::error::ParseCpuFeatureError;
+
+// The clippy::use_self exception is due to a false positive indicating that
+// `CpuFeature` should be replaced by `Self`. Attaching the allowance to the
+// type itself has no effect, therefore it's disabled for the whole module.
+// Feel free to remove this allow attribute once the bug is fixed.
+// See https://github.com/rust-lang/rust-clippy/issues/6902
+#![allow(clippy::use_self)]
+
 use crate::lib::std::str::FromStr;
 use crate::lib::std::string::{String, ToString};
 use enumset::{EnumSet, EnumSetType};
-use loupe::MemoryUsage;
 pub use target_lexicon::{
     Architecture, BinaryFormat, CallingConvention, Endianness, OperatingSystem, PointerWidth,
     Triple,
 };
+use wasmer_types::error::ParseCpuFeatureError;
 
 /// The nomenclature is inspired by the [`cpuid` crate].
 /// The list of supported features was initially retrieved from
@@ -161,11 +168,9 @@ impl ToString for CpuFeature {
 
 /// This is the target that we will use for compiling
 /// the WebAssembly ModuleInfo, and then run it.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, MemoryUsage)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Target {
-    #[loupe(skip)]
     triple: Triple,
-    #[loupe(skip)]
     cpu_features: EnumSet<CpuFeature>,
 }
 

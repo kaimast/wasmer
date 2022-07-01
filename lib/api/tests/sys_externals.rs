@@ -94,7 +94,7 @@ mod sys {
             maximum: Some(1),
         };
         let f = Function::new_native(&store, |num: i32| num + 1);
-        let table = Table::new(&store, table_type, Value::FuncRef(Some(f.clone())))?;
+        let table = Table::new(&store, table_type, Value::FuncRef(Some(f)))?;
         assert_eq!(*table.ty(), table_type);
         let _elem = table.get(0).unwrap();
         // assert_eq!(elem.funcref().unwrap(), f);
@@ -123,7 +123,7 @@ mod sys {
         assert!(old_len.is_err());
 
         // Growing to a bigger maximum should return None
-        let old_len = table.grow(5, Value::FuncRef(Some(f.clone())))?;
+        let old_len = table.grow(5, Value::FuncRef(Some(f)))?;
         assert_eq!(old_len, 0);
 
         Ok(())
@@ -238,11 +238,10 @@ mod sys {
             function.ty().clone(),
             FunctionType::new(vec![], vec![Type::I32])
         );
-        let function = Function::new_native_with_env(
-            &store,
-            my_env.clone(),
-            |_env: &MyEnv| -> (i32, i64, f32, f64) { (1, 2, 3.0, 4.0) },
-        );
+        let function =
+            Function::new_native_with_env(&store, my_env, |_env: &MyEnv| -> (i32, i64, f32, f64) {
+                (1, 2, 3.0, 4.0)
+            });
         assert_eq!(
             function.ty().clone(),
             FunctionType::new(vec![], vec![Type::I32, Type::I64, Type::F32, Type::F64])
@@ -338,7 +337,7 @@ mod sys {
         let function = Function::new_with_env(
             &store,
             function_type,
-            my_env.clone(),
+            my_env,
             |_env: &MyEnv, _values: &[Value]| unimplemented!(),
         );
         assert_eq!(function.ty().params(), [Type::V128]);
@@ -351,32 +350,32 @@ mod sys {
     fn native_function_works() -> Result<()> {
         let store = Store::default();
         let function = Function::new_native(&store, || {});
-        let native_function: NativeFunc<(), ()> = function.native().unwrap();
+        let native_function: TypedFunction<(), ()> = function.native().unwrap();
         let result = native_function.call();
         assert!(result.is_ok());
 
         let function = Function::new_native(&store, |a: i32| -> i32 { a + 1 });
-        let native_function: NativeFunc<i32, i32> = function.native().unwrap();
+        let native_function: TypedFunction<i32, i32> = function.native().unwrap();
         assert_eq!(native_function.call(3).unwrap(), 4);
 
         fn rust_abi(a: i32, b: i64, c: f32, d: f64) -> u64 {
             (a as u64 * 1000) + (b as u64 * 100) + (c as u64 * 10) + (d as u64)
         }
         let function = Function::new_native(&store, rust_abi);
-        let native_function: NativeFunc<(i32, i64, f32, f64), u64> = function.native().unwrap();
+        let native_function: TypedFunction<(i32, i64, f32, f64), u64> = function.native().unwrap();
         assert_eq!(native_function.call(8, 4, 1.5, 5.).unwrap(), 8415);
 
         let function = Function::new_native(&store, || -> i32 { 1 });
-        let native_function: NativeFunc<(), i32> = function.native().unwrap();
+        let native_function: TypedFunction<(), i32> = function.native().unwrap();
         assert_eq!(native_function.call().unwrap(), 1);
 
         let function = Function::new_native(&store, |_a: i32| {});
-        let native_function: NativeFunc<i32, ()> = function.native().unwrap();
+        let native_function: TypedFunction<i32, ()> = function.native().unwrap();
         assert!(native_function.call(4).is_ok());
 
         let function =
             Function::new_native(&store, || -> (i32, i64, f32, f64) { (1, 2, 3.0, 4.0) });
-        let native_function: NativeFunc<(), (i32, i64, f32, f64)> = function.native().unwrap();
+        let native_function: TypedFunction<(), (i32, i64, f32, f64)> = function.native().unwrap();
         assert_eq!(native_function.call().unwrap(), (1, 2, 3.0, 4.0));
 
         Ok(())
@@ -397,7 +396,7 @@ mod sys {
         let f = {
             let module = Module::new(&store, wat)?;
             let instance = Instance::new(&module, &imports! {})?;
-            let f: NativeFunc<(i32, i32), i32> = instance.exports.get_native_function("sum")?;
+            let f: TypedFunction<(i32, i32), i32> = instance.exports.get_native_function("sum")?;
 
             assert_eq!(f.call(4, 5)?, 9);
             f
@@ -424,7 +423,8 @@ mod sys {
         let f = {
             let module = Module::new(&store, wat)?;
             let instance = Instance::new(&module, &imports! {})?;
-            let f: NativeFunc<(i32, i32), i32> = instance.exports.get_with_generics_weak("sum")?;
+            let f: TypedFunction<(i32, i32), i32> =
+                instance.exports.get_with_generics_weak("sum")?;
 
             assert_eq!(f.call(4, 5)?, 9);
             f

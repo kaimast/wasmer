@@ -1,32 +1,32 @@
 //! Native Functions.
 //!
-//! This module creates the helper `NativeFunc` that let us call WebAssembly
+//! This module creates the helper `TypedFunction` that let us call WebAssembly
 //! functions with the native ABI, that is:
 //!
 //! ```ignore
 //! let add_one = instance.exports.get_function("function_name")?;
-//! let add_one_native: NativeFunc<i32, i32> = add_one.native().unwrap();
+//! let add_one_native: TypedFunction<i32, i32> = add_one.native().unwrap();
 //! ```
 use std::marker::PhantomData;
 
 use crate::sys::externals::function::{DynamicFunction, VMDynamicFunction};
 use crate::sys::{FromToNativeWasmType, Function, RuntimeError, Store, WasmTypeList};
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use wasmer_engine::ExportFunction;
+use wasmer_compiler::ExportFunction;
 use wasmer_types::NativeWasmType;
 use wasmer_vm::{VMDynamicFunctionContext, VMFunctionBody, VMFunctionEnvironment, VMFunctionKind};
 
 /// A WebAssembly function that can be called natively
 /// (using the Native ABI).
-pub struct NativeFunc<Args = (), Rets = ()> {
+pub struct TypedFunction<Args = (), Rets = ()> {
     store: Store,
     exported: ExportFunction,
     _phantom: PhantomData<(Args, Rets)>,
 }
 
-unsafe impl<Args, Rets> Send for NativeFunc<Args, Rets> {}
+unsafe impl<Args, Rets> Send for TypedFunction<Args, Rets> {}
 
-impl<Args, Rets> NativeFunc<Args, Rets>
+impl<Args, Rets> TypedFunction<Args, Rets>
 where
     Args: WasmTypeList,
     Rets: WasmTypeList,
@@ -69,12 +69,12 @@ where
 }
 
 /*
-impl<Args, Rets> From<&NativeFunc<Args, Rets>> for VMFunction
+impl<Args, Rets> From<&TypedFunction<Args, Rets>> for VMFunction
 where
     Args: WasmTypeList,
     Rets: WasmTypeList,
 {
-    fn from(other: &NativeFunc<Args, Rets>) -> Self {
+    fn from(other: &TypedFunction<Args, Rets>) -> Self {
         let signature = FunctionType::new(Args::wasm_types(), Rets::wasm_types());
         Self {
             address: other.address,
@@ -87,7 +87,7 @@ where
     }
 }*/
 
-impl<Args: WasmTypeList, Rets: WasmTypeList> Clone for NativeFunc<Args, Rets> {
+impl<Args: WasmTypeList, Rets: WasmTypeList> Clone for TypedFunction<Args, Rets> {
     fn clone(&self) -> Self {
         let mut exported = self.exported.clone();
         exported.vm_function.upgrade_instance_ref().unwrap();
@@ -100,22 +100,22 @@ impl<Args: WasmTypeList, Rets: WasmTypeList> Clone for NativeFunc<Args, Rets> {
     }
 }
 
-impl<Args, Rets> From<&NativeFunc<Args, Rets>> for ExportFunction
+impl<Args, Rets> From<&TypedFunction<Args, Rets>> for ExportFunction
 where
     Args: WasmTypeList,
     Rets: WasmTypeList,
 {
-    fn from(other: &NativeFunc<Args, Rets>) -> Self {
+    fn from(other: &TypedFunction<Args, Rets>) -> Self {
         other.exported.clone()
     }
 }
 
-impl<Args, Rets> From<NativeFunc<Args, Rets>> for Function
+impl<Args, Rets> From<TypedFunction<Args, Rets>> for Function
 where
     Args: WasmTypeList,
     Rets: WasmTypeList,
 {
-    fn from(other: NativeFunc<Args, Rets>) -> Self {
+    fn from(other: TypedFunction<Args, Rets>) -> Self {
         Self {
             store: other.store,
             exported: other.exported,
@@ -126,12 +126,13 @@ where
 macro_rules! impl_native_traits {
     (  $( $x:ident ),* ) => {
         #[allow(unused_parens, non_snake_case)]
-        impl<$( $x , )* Rets> NativeFunc<( $( $x ),* ), Rets>
+        impl<$( $x , )* Rets> TypedFunction<( $( $x ),* ), Rets>
         where
             $( $x: FromToNativeWasmType, )*
             Rets: WasmTypeList,
         {
             /// Call the typed func and return results.
+            #[allow(clippy::too_many_arguments)]
             pub fn call(&self, $( $x: $x, )* ) -> Result<Rets, RuntimeError> {
                 if !self.is_host() {
                     // We assume the trampoline is always going to be present for
@@ -223,7 +224,7 @@ macro_rules! impl_native_traits {
         }
 
         #[allow(unused_parens)]
-        impl<'a, $( $x, )* Rets> crate::sys::exports::ExportableWithGenerics<'a, ($( $x ),*), Rets> for NativeFunc<( $( $x ),* ), Rets>
+        impl<'a, $( $x, )* Rets> crate::sys::exports::ExportableWithGenerics<'a, ($( $x ),*), Rets> for TypedFunction<( $( $x ),* ), Rets>
         where
             $( $x: FromToNativeWasmType, )*
             Rets: WasmTypeList,
@@ -233,7 +234,7 @@ macro_rules! impl_native_traits {
                 crate::Function::get_self_from_extern(_extern)?.native().map_err(|_| crate::sys::exports::ExportError::IncompatibleType)
             }
 
-            fn into_weak_instance_ref(&mut self) {
+            fn convert_to_weak_instance_ref(&mut self) {
                 self.exported.vm_function.instance_ref.as_mut().map(|v| *v = v.downgrade());
             }
         }

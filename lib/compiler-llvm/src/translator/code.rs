@@ -27,13 +27,13 @@ use crate::object_file::{load_object_file, CompiledFunction};
 use std::convert::TryFrom;
 use wasmer_compiler::wasmparser::{MemoryImmediate, Operator};
 use wasmer_compiler::{
-    wptype_to_type, CompileError, FunctionBinaryReader, FunctionBodyData, MiddlewareBinaryReader,
-    ModuleMiddlewareChain, ModuleTranslationState, RelocationTarget, Symbol, SymbolRegistry,
+    from_binaryreadererror_wasmerror, wptype_to_type, FunctionBinaryReader, FunctionBodyData,
+    MiddlewareBinaryReader, ModuleMiddlewareChain, ModuleTranslationState, Symbol, SymbolRegistry,
 };
 use wasmer_types::entity::PrimaryMap;
 use wasmer_types::{
-    FunctionIndex, FunctionType, GlobalIndex, LocalFunctionIndex, MemoryIndex, ModuleInfo,
-    SignatureIndex, TableIndex, Type,
+    CompileError, FunctionIndex, FunctionType, GlobalIndex, LocalFunctionIndex, MemoryIndex,
+    ModuleInfo, RelocationTarget, SignatureIndex, TableIndex, Type,
 };
 use wasmer_vm::{MemoryStyle, TableStyle, VMOffsets};
 
@@ -59,6 +59,7 @@ impl FuncTranslator {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn translate_to_module(
         &self,
         wasm_module: &ModuleInfo,
@@ -92,7 +93,7 @@ impl FuncTranslator {
             .unwrap();
 
         // TODO: pointer width
-        let offsets = VMOffsets::new(8, &wasm_module);
+        let offsets = VMOffsets::new(8, wasm_module);
         let intrinsics = Intrinsics::declare(&module, &self.ctx, &target_data);
         let (func_type, func_attrs) =
             self.abi
@@ -269,6 +270,7 @@ impl FuncTranslator {
         Ok(module)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn translate(
         &self,
         wasm_module: &ModuleInfo,
@@ -347,6 +349,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
 
     // Convert floating point vector to integer and saturate when out of range.
     // https://github.com/WebAssembly/nontrapping-float-to-int-conversions/blob/master/proposals/nontrapping-float-to-int-conversion/Overview.md
+    #[allow(clippy::too_many_arguments)]
     fn trunc_sat<T: FloatMathType<'ctx>>(
         &self,
         fvec_ty: T,
@@ -464,6 +467,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
 
     // Convert floating point vector to integer and saturate when out of range.
     // https://github.com/WebAssembly/nontrapping-float-to-int-conversions/blob/master/proposals/nontrapping-float-to-int-conversion/Overview.md
+    #[allow(clippy::too_many_arguments)]
     fn trunc_sat_into_int<T: FloatMathType<'ctx>>(
         &self,
         fvec_ty: T,
@@ -1036,7 +1040,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
         };
         self.mark_memaccess_nodelete(memory_index, memaccess)?;
         tbaa_label(
-            &self.module,
+            self.module,
             self.intrinsics,
             format!("memory {}", memory_index.as_u32()),
             memaccess,
@@ -1241,7 +1245,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
             for (idx, value) in results.enumerate() {
                 let value = self.builder.build_bitcast(
                     value,
-                    type_to_llvm(&self.intrinsics, wasm_fn_type.results()[idx])?,
+                    type_to_llvm(self.intrinsics, wasm_fn_type.results()[idx])?,
                     "",
                 );
                 struct_value = self
@@ -1255,7 +1259,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
         } else {
             self.builder
                 .build_return(Some(&self.abi.pack_values_for_register_return(
-                    &self.intrinsics,
+                    self.intrinsics,
                     &self.builder,
                     &results.collect::<Vec<_>>(),
                     &func_type,
@@ -1592,12 +1596,9 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     .get_insert_block()
                     .ok_or_else(|| CompileError::Codegen("not currently in a block".to_string()))?;
 
-                let mut label_depths = table.targets().collect::<Result<Vec<_>, _>>()?;
-                let default_depth = label_depths.pop().unwrap().0;
-
                 let index = self.state.pop1()?;
 
-                let default_frame = self.state.frame_at_depth(default_depth)?;
+                let default_frame = self.state.frame_at_depth(table.default())?;
 
                 let phis = if default_frame.is_loop() {
                     default_frame.loop_body_phis()
@@ -1610,10 +1611,11 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     phi.add_incoming(&[(value, current_block)]);
                 }
 
-                let cases: Vec<_> = label_depths
-                    .iter()
+                let cases: Vec<_> = table
+                    .targets()
                     .enumerate()
-                    .map(|(case_index, &(depth, _))| {
+                    .map(|(case_index, depth)| {
+                        let depth = depth.map_err(from_binaryreadererror_wasmerror)?;
                         let frame_result: Result<&ControlFrame, CompileError> =
                             self.state.frame_at_depth(depth);
                         let frame = match frame_result {
@@ -1788,18 +1790,16 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                 if let ControlFrame::IfElse {
                     if_else,
                     next,
-                    if_else_state,
+                    if_else_state: IfElseState::If,
                     else_phis,
                     ..
                 } = &frame
                 {
-                    if let IfElseState::If = if_else_state {
-                        for (phi, else_phi) in frame.phis().iter().zip(else_phis.iter()) {
-                            phi.add_incoming(&[(&else_phi.as_basic_value(), *if_else)]);
-                        }
-                        self.builder.position_at_end(*if_else);
-                        self.builder.build_unconditional_branch(*next);
+                    for (phi, else_phi) in frame.phis().iter().zip(else_phis.iter()) {
+                        phi.add_incoming(&[(&else_phi.as_basic_value(), *if_else)]);
                     }
+                    self.builder.position_at_end(*if_else);
+                    self.builder.build_unconditional_branch(*next);
                 }
 
                 self.builder.position_at_end(*frame.code_after());
@@ -2022,7 +2022,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                 let pointer_value = self.locals[local_index as usize];
                 let v = self.builder.build_load(pointer_value, "");
                 tbaa_label(
-                    &self.module,
+                    self.module,
                     self.intrinsics,
                     format!("local {}", local_index),
                     v.as_instruction_value().unwrap(),
@@ -2035,7 +2035,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                 let v = self.apply_pending_canonicalization(v, i);
                 let store = self.builder.build_store(pointer_value, v);
                 tbaa_label(
-                    &self.module,
+                    self.module,
                     self.intrinsics,
                     format!("local {}", local_index),
                     store,
@@ -2047,7 +2047,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                 let v = self.apply_pending_canonicalization(v, i);
                 let store = self.builder.build_store(pointer_value, v);
                 tbaa_label(
-                    &self.module,
+                    self.module,
                     self.intrinsics,
                     format!("local {}", local_index),
                     store,
@@ -2262,7 +2262,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                 */
 
                 self.abi
-                    .rets_from_call(&self.builder, &self.intrinsics, call_site, func_type)
+                    .rets_from_call(&self.builder, self.intrinsics, call_site, func_type)
                     .iter()
                     .for_each(|ret| self.state.push1(*ret));
             }
@@ -2463,8 +2463,8 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                 self.builder.position_at_end(continue_block);
 
                 let (llvm_func_type, llvm_func_attrs) = self.abi.func_type_to_llvm(
-                    &self.context,
-                    &self.intrinsics,
+                    self.context,
+                    self.intrinsics,
                     Some(self.ctx.get_offsets()),
                     func_type,
                 )?;
@@ -2556,7 +2556,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                 */
 
                 self.abi
-                    .rets_from_call(&self.builder, &self.intrinsics, call_site, func_type)
+                    .rets_from_call(&self.builder, self.intrinsics, call_site, func_type)
                     .iter()
                     .for_each(|ret| self.state.push1(*ret));
             }
@@ -2617,7 +2617,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     ]),
                     "",
                 );
-                let left = extend_op(&self, left);
+                let left = extend_op(self, left);
                 let right = self.builder.build_shuffle_vector(
                     v,
                     v.get_type().get_undef(),
@@ -2633,7 +2633,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     ]),
                     "",
                 );
-                let right = extend_op(&self, right);
+                let right = extend_op(self, right);
 
                 let res = self.builder.build_int_add(left, right, "");
                 let res = self.builder.build_bitcast(res, self.intrinsics.i128_ty, "");
@@ -2671,7 +2671,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     ]),
                     "",
                 );
-                let left = extend_op(&self, left);
+                let left = extend_op(self, left);
                 let right = self.builder.build_shuffle_vector(
                     v,
                     v.get_type().get_undef(),
@@ -2683,7 +2683,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     ]),
                     "",
                 );
-                let right = extend_op(&self, right);
+                let right = extend_op(self, right);
 
                 let res = self.builder.build_int_add(left, right, "");
                 let res = self.builder.build_bitcast(res, self.intrinsics.i128_ty, "");
@@ -2906,10 +2906,8 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     let max_values =
                         self.builder
                             .build_int_s_extend(max_values, self.intrinsics.i32x8_ty, "");
-                    let saturate_up =
-                        self.builder
-                            .build_int_compare(IntPredicate::SGT, res, max_values, "");
-                    saturate_up
+                    self.builder
+                        .build_int_compare(IntPredicate::SGT, res, max_values, "")
                 };
 
                 let res = self
@@ -2968,14 +2966,14 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     VectorType::const_vector(&shuffle_array),
                     "",
                 );
-                let val1 = extend_op(&self, val1);
+                let val1 = extend_op(self, val1);
                 let val2 = self.builder.build_shuffle_vector(
                     v2,
                     v2.get_type().get_undef(),
                     VectorType::const_vector(&shuffle_array),
                     "",
                 );
-                let val2 = extend_op(&self, val2);
+                let val2 = extend_op(self, val2);
                 let res = self.builder.build_int_mul(val1, val2, "");
                 let res = self.builder.build_bitcast(res, self.intrinsics.i128_ty, "");
                 self.state.push1(res);
@@ -3017,14 +3015,14 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     VectorType::const_vector(&shuffle_array),
                     "",
                 );
-                let val1 = extend_op(&self, val1);
+                let val1 = extend_op(self, val1);
                 let val2 = self.builder.build_shuffle_vector(
                     v2,
                     v2.get_type().get_undef(),
                     VectorType::const_vector(&shuffle_array),
                     "",
                 );
-                let val2 = extend_op(&self, val2);
+                let val2 = extend_op(self, val2);
                 let res = self.builder.build_int_mul(val1, val2, "");
                 let res = self.builder.build_bitcast(res, self.intrinsics.i128_ty, "");
                 self.state.push1(res);
@@ -3060,14 +3058,14 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     VectorType::const_vector(&shuffle_array),
                     "",
                 );
-                let val1 = extend_op(&self, val1);
+                let val1 = extend_op(self, val1);
                 let val2 = self.builder.build_shuffle_vector(
                     v2,
                     v2.get_type().get_undef(),
                     VectorType::const_vector(&shuffle_array),
                     "",
                 );
-                let val2 = extend_op(&self, val2);
+                let val2 = extend_op(self, val2);
                 let res = self.builder.build_int_mul(val1, val2, "");
                 let res = self.builder.build_bitcast(res, self.intrinsics.i128_ty, "");
                 self.state.push1(res);
@@ -6779,7 +6777,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     VectorType::const_vector(&indices),
                     "",
                 );
-                let res = extend(&self, low);
+                let res = extend(self, low);
                 let res = self.builder.build_bitcast(res, self.intrinsics.i128_ty, "");
                 self.state.push1(res);
             }
@@ -7461,7 +7459,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     ]),
                     "",
                 );
-                let res = extend(&self, low);
+                let res = extend(self, low);
                 let res = self
                     .builder
                     .build_signed_int_to_float(res, self.intrinsics.f64x2_ty, "");
@@ -9235,7 +9233,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     )
                     .unwrap();
                 tbaa_label(
-                    &self.module,
+                    self.module,
                     self.intrinsics,
                     format!("memory {}", memory_index.as_u32()),
                     old.as_instruction_value().unwrap(),
@@ -9270,7 +9268,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     )
                     .unwrap();
                 tbaa_label(
-                    &self.module,
+                    self.module,
                     self.intrinsics,
                     format!("memory {}", memory_index.as_u32()),
                     old.as_instruction_value().unwrap(),
@@ -9302,7 +9300,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                     )
                     .unwrap();
                 tbaa_label(
-                    &self.module,
+                    self.module,
                     self.intrinsics,
                     format!("memory {}", memory_index.as_u32()),
                     old.as_instruction_value().unwrap(),
@@ -11058,9 +11056,10 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
             Operator::TableGet { table } => {
                 let table_index = self.intrinsics.i32_ty.const_int(table.into(), false);
                 let elem = self.state.pop1()?;
-                let table_get = if let Some(_) = self
+                let table_get = if self
                     .wasm_module
                     .local_table_index(TableIndex::from_u32(table))
+                    .is_some()
                 {
                     self.intrinsics.table_get
                 } else {
@@ -11096,9 +11095,10 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                 let value = self
                     .builder
                     .build_bitcast(value, self.intrinsics.anyref_ty, "");
-                let table_set = if let Some(_) = self
+                let table_set = if self
                     .wasm_module
                     .local_table_index(TableIndex::from_u32(table))
+                    .is_some()
                 {
                     self.intrinsics.table_set
                 } else {

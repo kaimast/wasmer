@@ -21,20 +21,18 @@ use crate::memory::{Memory, MemoryError};
 use crate::table::{Table, LinearTable, TableElement};
 use crate::trap::{catch_traps, Trap, TrapCode, TrapHandler};
 use crate::vmcontext::{
-    VMBuiltinFunctionsArray, VMCallerCheckedAnyfunc, VMContext, VMFunctionBody,
-    VMFunctionEnvironment, VMFunctionImport, VMFunctionKind, VMGlobalDefinition, VMGlobalImport,
-    VMMemoryDefinition, VMMemoryImport, VMSharedSignatureIndex, VMTableDefinition, VMTableImport,
-    VMTrampoline,
+    VMBuiltinFunctionsArray, VMCallerCheckedAnyfunc, VMContext, VMFunctionEnvironment,
+    VMFunctionImport, VMFunctionKind, VMGlobalDefinition, VMGlobalImport, VMMemoryDefinition,
+    VMMemoryImport, VMSharedSignatureIndex, VMTableDefinition, VMTableImport, VMTrampoline,
 };
-use crate::{FunctionBodyPtr, VMOffsets};
+use crate::{FunctionBodyPtr, VMFunctionBody, VMOffsets};
 use crate::{VMFunction, VMGlobal, VMMemory, VMTable};
-use loupe::{MemoryUsage, MemoryUsageTracker};
 use memoffset::offset_of;
 use more_asserts::assert_lt;
 use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::convert::{TryFrom, TryInto};
+use std::convert::{TryFrom,TryInto};
 use std::ffi;
 use std::fmt;
 use std::mem;
@@ -59,7 +57,6 @@ pub type ImportInitializerFuncPtr<ResultErr = *mut ffi::c_void> =
 /// contain various data. That's why the type has a C representation
 /// to ensure that the `vmctx` field is last. See the documentation of
 /// the `vmctx` field to learn more.
-#[derive(MemoryUsage)]
 #[repr(C)]
 pub(crate) struct Instance {
     /// The `ModuleInfo` this `Instance` was instantiated from.
@@ -81,7 +78,6 @@ pub(crate) struct Instance {
     functions: BoxedSlice<LocalFunctionIndex, FunctionBodyPtr>,
 
     /// Pointers to function call trampolines in executable memory.
-    #[loupe(skip)]
     function_call_trampolines: BoxedSlice<SignatureIndex, VMTrampoline>,
 
     /// Passive elements in this instantiation. As `elem.drop`s happen, these
@@ -111,7 +107,6 @@ pub(crate) struct Instance {
     /// field is last, and represents a dynamically-sized array that
     /// extends beyond the nominal end of the struct (similar to a
     /// flexible array member).
-    #[loupe(skip)]
     vmctx: VMContext,
 }
 
@@ -203,12 +198,6 @@ impl Drop for ImportFunctionEnv {
             }
             Self::NoEnv => (),
         }
-    }
-}
-
-impl MemoryUsage for ImportFunctionEnv {
-    fn size_of_val(&self, _: &mut dyn MemoryUsageTracker) -> usize {
-        mem::size_of_val(self)
     }
 }
 
@@ -404,8 +393,11 @@ impl Instance {
     }
 
     /// Invoke the WebAssembly start function of the instance, if one is present.
-    #[allow(dead_code)]
-    fn invoke_start_function(&self, trap_handler: &dyn TrapHandler) -> Result<(), Trap> {
+    #[ allow(dead_code) ]
+    fn invoke_start_function(
+        &self,
+        trap_handler: &(dyn TrapHandler + 'static),
+    ) -> Result<(), Trap> {
         let start_index = match self.module.start_function {
             Some(idx) => idx,
             None => return Ok(()),
@@ -587,7 +579,7 @@ impl Instance {
 
         let import = self.imported_table(table_index);
         let from = import.from.as_ref();
-        from.grow(delta.into(), init_value)
+        from.grow(delta, init_value)
     }
 
     /// Get table element by index.
@@ -1087,7 +1079,7 @@ impl Instance {
 ///
 /// This is more or less a public facade of the private `Instance`,
 /// providing useful higher-level API.
-#[derive(Debug, PartialEq, MemoryUsage)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct InstanceHandle {
     /// The [`InstanceRef`]. See its documentation to learn more.
     instance: InstanceRef,
@@ -1239,7 +1231,7 @@ impl InstanceHandle {
     /// Only safe to call immediately after instantiation.
     pub unsafe fn finish_instantiation(
         &self,
-        _trap_handler: &dyn TrapHandler,
+        _trap_handler: &(dyn TrapHandler + 'static),
         data_initializers: &[DataInitializer<'_>],
     ) -> Result<(), Trap> {
         let instance = self.instance().as_ref();
@@ -1286,7 +1278,7 @@ impl InstanceHandle {
     pub fn lookup(&self, field: &str) -> Option<VMExtern> {
         let export = self.module_ref().exports.get(field)?;
 
-        Some(self.lookup_by_declaration(&export))
+        Some(self.lookup_by_declaration(export))
     }
 
     /// This sets the stack-specific yielder for async calls
@@ -1558,7 +1550,7 @@ unsafe fn get_memory_slice<'instance>(
         let import = instance.imported_memory(init.location.memory_index);
         *import.definition.as_ref()
     };
-    slice::from_raw_parts_mut(memory.base, memory.current_length.try_into().unwrap())
+    slice::from_raw_parts_mut(memory.base, memory.current_length)
 }
 
 /// Compute the offset for a table element initializer.
@@ -1649,7 +1641,7 @@ fn initialize_memories(
         let start = get_memory_init_start(init, instance);
         if start
             .checked_add(init.data.len())
-            .map_or(true, |end| end > memory.current_length.try_into().unwrap())
+            .map_or(true, |end| end > memory.current_length)
         {
             log::debug!("initialize_memories tried to access out of bounds memory at {:#X}-{:#X}, but data len is {:#X}", start, start.checked_add(init.data.len()).unwrap_or(0), memory.current_length);
             return Err(Trap::lib(TrapCode::HeapAccessOutOfBounds));

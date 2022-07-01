@@ -20,15 +20,14 @@ pub use self::yielder::Yielder;
 use crate::sys::exports::{ExportError, Exportable};
 use crate::sys::store::{Store, StoreObject};
 use crate::sys::ExternType;
-use loupe::MemoryUsage;
 use std::fmt;
-use wasmer_engine::Export;
+use wasmer_compiler::Export;
 
 /// An `Extern` is the runtime representation of an entity that
 /// can be imported or exported.
 ///
 /// Spec: <https://webassembly.github.io/spec/core/exec/runtime.html#external-values>
-#[derive(Clone, MemoryUsage)]
+#[derive(Clone)]
 pub enum Extern {
     /// A external [`Function`].
     Function(Function),
@@ -51,7 +50,7 @@ impl Extern {
         }
     }
 
-    /// Create an `Extern` from an `wasmer_engine::Export`.
+    /// Create an `Extern` from an `wasmer_compiler::Export`.
     pub fn from_vm_export(store: &Store, export: Export) -> Self {
         match export {
             Export::Function(f) => Self::Function(Function::from_vm_export(store, f)),
@@ -77,12 +76,12 @@ impl<'a> Exportable<'a> for Extern {
         Ok(_extern)
     }
 
-    fn into_weak_instance_ref(&mut self) {
+    fn convert_to_weak_instance_ref(&mut self) {
         match self {
-            Self::Function(f) => f.into_weak_instance_ref(),
-            Self::Global(g) => g.into_weak_instance_ref(),
-            Self::Memory(m) => m.into_weak_instance_ref(),
-            Self::Table(t) => t.into_weak_instance_ref(),
+            Self::Function(f) => f.convert_to_weak_instance_ref(),
+            Self::Global(g) => g.convert_to_weak_instance_ref(),
+            Self::Memory(m) => m.convert_to_weak_instance_ref(),
+            Self::Table(t) => t.convert_to_weak_instance_ref(),
         }
     }
 }

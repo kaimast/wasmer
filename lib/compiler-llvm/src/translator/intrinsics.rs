@@ -23,11 +23,10 @@ use inkwell::{
     AddressSpace,
 };
 use std::collections::{hash_map::Entry, HashMap};
-use wasmer_compiler::CompileError;
 use wasmer_types::entity::{EntityRef, PrimaryMap};
 use wasmer_types::{
-    FunctionIndex, FunctionType as FuncType, GlobalIndex, LocalFunctionIndex, MemoryIndex,
-    ModuleInfo as WasmerCompilerModule, Mutability, SignatureIndex, TableIndex, Type,
+    CompileError, FunctionIndex, FunctionType as FuncType, GlobalIndex, LocalFunctionIndex,
+    MemoryIndex, ModuleInfo as WasmerCompilerModule, Mutability, SignatureIndex, TableIndex, Type,
 };
 use wasmer_vm::{MemoryStyle, TrapCode, VMBuiltinFunctionIndex, VMOffsets};
 
@@ -703,7 +702,7 @@ impl<'ctx> Intrinsics<'ctx> {
             ),
             readonly: context
                 .create_enum_attribute(Attribute::get_named_enum_kind_id("readonly"), 0),
-            stack_probe: context.create_string_attribute("probe-stack", "wasmer_vm_probestack"),
+            stack_probe: context.create_string_attribute("probe-stack", "inline-asm"),
 
             void_ty,
             i1_ty,
@@ -1126,7 +1125,7 @@ impl<'ctx, 'a> CtxType<'ctx, 'a> {
             cached_memory_size: HashMap::new(),
 
             // TODO: pointer width
-            offsets: VMOffsets::new(8, &wasm_module),
+            offsets: VMOffsets::new(8, wasm_module),
         }
     }
 
@@ -1435,7 +1434,7 @@ impl<'ctx, 'a> CtxType<'ctx, 'a> {
                 let global_ptr = cache_builder
                     .build_bitcast(
                         global_ptr,
-                        type_to_llvm_ptr(&intrinsics, global_value_type)?,
+                        type_to_llvm_ptr(intrinsics, global_value_type)?,
                         "",
                     )
                     .into_pointer_value();
@@ -1478,6 +1477,7 @@ impl<'ctx, 'a> CtxType<'ctx, 'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn local_func(
         &mut self,
         _local_function_index: LocalFunctionIndex,

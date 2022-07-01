@@ -3,19 +3,18 @@ use crate::sys::externals::Extern;
 use crate::sys::store::Store;
 use crate::sys::types::{Val, ValFuncRef};
 use crate::sys::FunctionType;
-use crate::sys::NativeFunc;
 use crate::sys::RuntimeError;
+use crate::sys::TypedFunction;
 use crate::sys::WasmerEnv;
 pub use inner::{FromToNativeWasmType, HostFunction, WasmTypeList, WithEnv, WithoutEnv};
 
-use loupe::MemoryUsage;
 use std::cmp::max;
 use std::ffi::c_void;
 use std::fmt;
 use std::sync::Arc;
-use wasmer_engine::{Export, ExportFunction, ExportFunctionMetadata};
+use wasmer_compiler::{Export, ExportFunction, ExportFunctionMetadata};
 use wasmer_vm::{
-    raise_user_trap, resume_panic, wasmer_call_trampoline, ImportInitializerFuncPtr,
+    on_host_stack, raise_user_trap, resume_panic, wasmer_call_trampoline, ImportInitializerFuncPtr,
     VMCallerCheckedAnyfunc, VMDynamicFunctionContext, VMFuncRef, VMFunction, VMFunctionBody,
     VMFunctionEnvironment, VMFunctionKind, VMTrampoline,
 };
@@ -37,7 +36,7 @@ use wasmer_vm::{
 ///   with native functions. Attempting to create a native `Function` with one will
 ///   result in a panic.
 ///   [Closures as host functions tracking issue](https://github.com/wasmerio/wasmer/issues/1840)
-#[derive(PartialEq, MemoryUsage)]
+#[derive(PartialEq)]
 pub struct Function {
     pub(crate) store: Store,
     pub(crate) exported: ExportFunction,
@@ -46,8 +45,7 @@ pub struct Function {
 impl wasmer_types::WasmValueType for Function {
     /// Write the value.
     unsafe fn write_value_to(&self, p: *mut i128) {
-        let func_ref =
-            Val::into_vm_funcref(&Val::FuncRef(Some(self.clone())), &self.store).unwrap();
+        let func_ref = Val::into_vm_funcref(Val::FuncRef(Some(self.clone())), &self.store).unwrap();
         std::ptr::write(p as *mut VMFuncRef, func_ref);
     }
 
@@ -570,7 +568,7 @@ impl Function {
             VMFunctionKind::Dynamic => unsafe {
                 type VMContextWithEnv = VMDynamicFunctionContext<DynamicFunction<std::ffi::c_void>>;
                 let ctx = self.exported.vm_function.vmctx.host_env as *mut VMContextWithEnv;
-                Ok((*ctx).ctx.call(&params)?.into_boxed_slice())
+                Ok((*ctx).ctx.call(params)?.into_boxed_slice())
             },
             VMFunctionKind::Static => {
                 unimplemented!(
@@ -598,7 +596,7 @@ impl Function {
     }
 
     /// Transform this WebAssembly function into a function with the
-    /// native ABI. See [`NativeFunc`] to learn more.
+    /// native ABI. See [`TypedFunction`] to learn more.
     ///
     /// # Examples
     ///
@@ -672,7 +670,7 @@ impl Function {
     /// // This results in an error: `RuntimeError`
     /// let sum_native = sum.native::<(i32, i32), i64>().unwrap();
     /// ```
-    pub fn native<Args, Rets>(&self) -> Result<NativeFunc<Args, Rets>, RuntimeError>
+    pub fn native<Args, Rets>(&self) -> Result<TypedFunction<Args, Rets>, RuntimeError>
     where
         Args: WasmTypeList,
         Rets: WasmTypeList,
@@ -705,7 +703,10 @@ impl Function {
             }
         }
 
-        Ok(NativeFunc::new(self.store.clone(), self.exported.clone()))
+        Ok(TypedFunction::new(
+            self.store.clone(),
+            self.exported.clone(),
+        ))
     }
 
     #[track_caller]
@@ -738,12 +739,10 @@ impl<'a> Exportable<'a> for Function {
         }
     }
 
-    fn into_weak_instance_ref(&mut self) {
-        self.exported
-            .vm_function
-            .instance_ref
-            .as_mut()
-            .map(|v| *v = v.downgrade());
+    fn convert_to_weak_instance_ref(&mut self) {
+        if let Some(v) = self.exported.vm_function.instance_ref.as_mut() {
+            *v = v.downgrade();
+        }
     }
 }
 
@@ -802,7 +801,7 @@ where
     Env: Sized + 'static + Send + Sync,
 {
     fn call(&self, args: &[Val]) -> Result<Vec<Val>, RuntimeError> {
-        (*self.func)(&*self.env, &args)
+        (*self.func)(&*self.env, args)
     }
     fn function_type(&self) -> &FunctionType {
         &self.function_type
@@ -839,32 +838,34 @@ impl<T: VMDynamicFunction> VMDynamicFunctionCall<T> for VMDynamicFunctionContext
         values_vec: *mut i128,
     ) {
         use std::panic::{self, AssertUnwindSafe};
-        let result = panic::catch_unwind(AssertUnwindSafe(|| {
-            let func_ty = self.ctx.function_type();
-            let mut args = Vec::with_capacity(func_ty.params().len());
-            let store = self.ctx.store();
-            for (i, ty) in func_ty.params().iter().enumerate() {
-                args.push(Val::read_value_from(store, values_vec.add(i), *ty));
-            }
-            let returns = self.ctx.call(&args)?;
+        let result = on_host_stack(|| {
+            panic::catch_unwind(AssertUnwindSafe(|| {
+                let func_ty = self.ctx.function_type();
+                let mut args = Vec::with_capacity(func_ty.params().len());
+                let store = self.ctx.store();
+                for (i, ty) in func_ty.params().iter().enumerate() {
+                    args.push(Val::read_value_from(store, values_vec.add(i), *ty));
+                }
+                let returns = self.ctx.call(&args)?;
 
-            // We need to dynamically check that the returns
-            // match the expected types, as well as expected length.
-            let return_types = returns.iter().map(|ret| ret.ty()).collect::<Vec<_>>();
-            if return_types != func_ty.results() {
-                return Err(RuntimeError::new(format!(
-                    "Dynamic function returned wrong signature. Expected {:?} but got {:?}",
-                    func_ty.results(),
-                    return_types
-                )));
-            }
-            for (i, ret) in returns.iter().enumerate() {
-                ret.write_value_to(values_vec.add(i));
-            }
-            Ok(())
-        })); // We get extern ref drops at the end of this block that we don't need.
-             // By preventing extern ref incs in the code above we can save the work of
-             // incrementing and decrementing. However the logic as-is is correct.
+                // We need to dynamically check that the returns
+                // match the expected types, as well as expected length.
+                let return_types = returns.iter().map(|ret| ret.ty()).collect::<Vec<_>>();
+                if return_types != func_ty.results() {
+                    return Err(RuntimeError::new(format!(
+                        "Dynamic function returned wrong signature. Expected {:?} but got {:?}",
+                        func_ty.results(),
+                        return_types
+                    )));
+                }
+                for (i, ret) in returns.iter().enumerate() {
+                    ret.write_value_to(values_vec.add(i));
+                }
+                Ok(())
+            })) // We get extern ref drops at the end of this block that we don't need.
+                // By preventing extern ref incs in the code above we can save the work of
+                // incrementing and decrementing. However the logic as-is is correct.
+        });
 
         match result {
             Ok(Ok(())) => {}
@@ -882,6 +883,7 @@ mod inner {
     use std::error::Error;
     use std::marker::PhantomData;
     use std::panic::{self, AssertUnwindSafe};
+    use wasmer_vm::on_host_stack;
 
     #[cfg(feature = "experimental-reference-types-extern-ref")]
     pub use wasmer_types::{ExternRef, VMExternRef};
@@ -895,6 +897,10 @@ mod inner {
     /// `FromNativeWasmType` and `ToNativeWasmType` but it creates a
     /// non-negligible complexity in the `WasmTypeList`
     /// implementation.
+    ///
+    /// # Safety
+    /// This trait is unsafe given the nature of how values are written and read from the native
+    /// stack
     pub unsafe trait FromToNativeWasmType
     where
         Self: Sized,
@@ -1250,6 +1256,7 @@ mod inner {
 
                 type Array = [i128; count_idents!( $( $x ),* )];
 
+                #[allow(clippy::unused_unit)]
                 fn from_array(array: Self::Array) -> Self {
                     // Unpack items of the array.
                     #[allow(non_snake_case)]
@@ -1285,6 +1292,7 @@ mod inner {
                     [0; count_idents!( $( $x ),* )]
                 }
 
+                #[allow(clippy::unused_unit)]
                 fn from_c_struct(c_struct: Self::CStruct) -> Self {
                     // Unpack items of the C structure.
                     #[allow(non_snake_case)]
@@ -1345,9 +1353,11 @@ mod inner {
                         Func: Fn( $( $x ),* ) -> RetsAsResult + 'static
                     {
                         let func: &Func = unsafe { &*(&() as *const () as *const Func) };
-                        let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                            func( $( FromToNativeWasmType::from_native($x) ),* ).into_result()
-                        }));
+                        let result = on_host_stack(|| {
+                            panic::catch_unwind(AssertUnwindSafe(|| {
+                                func( $( FromToNativeWasmType::from_native($x) ),* ).into_result()
+                            }))
+                        });
 
                         match result {
                             Ok(Ok(result)) => return result.into_c_struct(),
@@ -1389,9 +1399,11 @@ mod inner {
                     {
                         let func: &Func = unsafe { &*(&() as *const () as *const Func) };
 
-                        let result = panic::catch_unwind(AssertUnwindSafe(|| {
-                            func(env, $( FromToNativeWasmType::from_native($x) ),* ).into_result()
-                        }));
+                        let result = on_host_stack(|| {
+                            panic::catch_unwind(AssertUnwindSafe(|| {
+                                func(env, $( FromToNativeWasmType::from_native($x) ),* ).into_result()
+                            }))
+                        });
 
                         match result {
                             Ok(Ok(result)) => return result.into_c_struct(),

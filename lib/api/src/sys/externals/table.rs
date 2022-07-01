@@ -4,9 +4,8 @@ use crate::sys::store::Store;
 use crate::sys::types::{Val, ValFuncRef};
 use crate::sys::RuntimeError;
 use crate::sys::TableType;
-use loupe::MemoryUsage;
 use std::sync::Arc;
-use wasmer_engine::Export;
+use wasmer_compiler::Export;
 use wasmer_vm::{Table as RuntimeTable, TableElement, VMTable};
 
 /// A WebAssembly `table` instance.
@@ -18,7 +17,6 @@ use wasmer_vm::{Table as RuntimeTable, TableElement, VMTable};
 /// mutable from both host and WebAssembly.
 ///
 /// Spec: <https://webassembly.github.io/spec/core/exec/runtime.html#table-instances>
-#[derive(MemoryUsage)]
 pub struct Table {
     store: Store,
     vm_table: VMTable,
@@ -184,10 +182,9 @@ impl<'a> Exportable<'a> for Table {
         }
     }
 
-    fn into_weak_instance_ref(&mut self) {
-        self.vm_table
-            .instance_ref
-            .as_mut()
-            .map(|v| *v = v.downgrade());
+    fn convert_to_weak_instance_ref(&mut self) {
+        if let Some(v) = self.vm_table.instance_ref.as_mut() {
+            *v = v.downgrade();
+        }
     }
 }
