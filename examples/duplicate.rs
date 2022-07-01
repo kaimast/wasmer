@@ -1,7 +1,6 @@
-use wasmer::{Array, imports, wat2wasm, WasmerEnv, WasmPtr, Function, Instance, Module, Store, LazyInit, Memory};
+use wasmer::{Engine, Memory32, imports, wat2wasm, WasmerEnv, WasmPtr, Function, Instance, Module, Store, LazyInit, Memory};
 use wasmer_compiler_llvm::LLVM;
-use wasmer_engine_universal::Universal;
-use wasmer_engine::Engine;
+use wasmer_compiler::Universal;
 
 use std::convert::TryInto;
 use std::time::Instant;
@@ -64,11 +63,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     env_logger::init();
 
-    let engine = Universal::new(LLVM::default()).engine();
+    let compiler = LLVM::default();
+    let engine = Universal::new(compiler).engine();
+
     let mut tunables = wasmer::BaseTunables::for_target(engine.target());
     tunables.static_memory_bound = wasmer::Pages(0); // Always use dynamic memory
 
-    // Create a Store.
     let store = Store::new_with_tunables(&engine, tunables);
 
     println!("Compiling module...");
@@ -80,9 +80,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         env.number
     }
 
-    fn log_fn(env: &FnEnv, ptr: WasmPtr<u8, Array>, len: i32) {
+    fn log_fn(env: &FnEnv, ptr: WasmPtr<u8, Memory32>, len: i32) {
         let memory = env.memory.get_ref().expect("Memory not initialized");
-        let log_msg = ptr.get_utf8_string(memory, len as u32)
+        let log_msg = ptr.read_utf8_string(memory, len as u32)
             .expect("Pointer out of bounds");
 
         println!("Program said: {}", log_msg);
