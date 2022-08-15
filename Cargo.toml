@@ -81,7 +81,7 @@ env_logger = "0.9"
 async-wormhole = { git="https://github.com/kaimast/async-wormhole.git", branch="std-asm" }
 # For logging tests using the `RUST_LOG=debug` when testing
 test-log = { version = "0.2", default-features = false, features = ["trace"] }
-tracing = { version = "0.1", default-features = false, features = ["log"] }
+tracing = { version = "0.1", default-features = false }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt"] }
 
 [features]

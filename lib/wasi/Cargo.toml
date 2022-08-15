@@ -17,7 +17,7 @@ crate-type = ["cdylib", "rlib"]
 cfg-if = "1.0"
 thiserror = "1"
 generational-arena = { version = "0.2" }
-tracing = "0.1"
+tracing = { version="0.1", default-features=false }
 getrandom = "0.2"
 wasmer-wasi-types = { path = "../wasi-types", version = "2.1.1" }
 wasmer = { path = "../api", version = "2.1.1", default-features = false }

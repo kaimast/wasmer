@@ -41,7 +41,7 @@ wasmer-engine = { path = "../engine", version = "2.1.1" }
 wasmer-types = { path = "../types", version = "2.1.1" }
 target-lexicon = { version = "0.12.2", default-features = false }
 loupe = "0.1"
-tracing = "0.1"
+tracing = { version="0.1", default-features=false }
 log = "0.4"
 # - Optional dependencies for `sys`.
 wasmer-compiler-singlepass = { path = "../compiler-singlepass", version = "2.1.1", optional = true }
