@@ -13,7 +13,7 @@ use crate::trap::{Trap, TrapCode};
 use crate::VMExternRef;
 use loupe::{MemoryUsage, MemoryUsageTracker, POINTER_BYTE_SIZE};
 use std::any::Any;
-use std::convert::{TryFrom,TryInto};
+use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::mem;
 use std::ptr::{self, NonNull};
@@ -384,12 +384,14 @@ impl VMMemoryDefinition {
         // https://webassembly.github.io/reference-types/core/exec/instructions.html#exec-memory-copy
         if src
             .checked_add(len)
-            .map_or(true, |n| n > self.current_length.try_into().unwrap()) {
+            .map_or(true, |n| n > self.current_length.try_into().unwrap())
+        {
             log::debug!("memory_copy tried to access out of bounds source memory at {:#X}-{:#X}, but data len is {:#X} (base_ptr={:#X})", src, src.checked_add(len).unwrap_or(0), self.current_length, self.base as usize);
             Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
-        } else if  dst
-                .checked_add(len)
-                .map_or(true, |m| m > self.current_length.try_into().unwrap()) {
+        } else if dst
+            .checked_add(len)
+            .map_or(true, |m| m > self.current_length.try_into().unwrap())
+        {
             log::debug!("memory_copy tried to access out of bounds destination memory at {:#X}-{:#X}, but data len is {:#X} (base_ptr={:#X})", dst, dst.checked_add(len).unwrap_or(0), self.current_length, self.base as usize);
             Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
         } else {
@@ -424,7 +426,6 @@ impl VMMemoryDefinition {
             log::debug!("memory_fill tried to access out of bounds destination memory at {:#X}-{:#X}, but data len is {:#X} (base_ptr={:#X})", dst, dst.checked_add(len).unwrap_or(0), self.current_length, self.base as usize);
             Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
         } else {
-
             let dst = isize::try_from(dst).unwrap();
             let val = val as u8;
 

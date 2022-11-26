@@ -157,7 +157,10 @@ pub unsafe extern "C" fn wasmer_vm_memory32_grow(
     let instance = (&*vmctx).instance();
     let memory_index = LocalMemoryIndex::from_u32(memory_index);
 
-    log::trace!("vm_memory32_grow called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_memory32_grow called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     instance
         .memory_grow(memory_index, delta)
@@ -179,7 +182,10 @@ pub unsafe extern "C" fn wasmer_vm_imported_memory32_grow(
     let instance = (&*vmctx).instance();
     let memory_index = MemoryIndex::from_u32(memory_index);
 
-    log::trace!("vm_imported_memory32_grow called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_imported_memory32_grow called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     instance
         .imported_memory_grow(memory_index, delta)
@@ -197,7 +203,10 @@ pub unsafe extern "C" fn wasmer_vm_memory32_size(vmctx: *mut VMContext, memory_i
     let instance = (&*vmctx).instance();
     let memory_index = LocalMemoryIndex::from_u32(memory_index);
 
-    log::trace!("vm_memory32_size called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_memory32_size called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     instance.memory_size(memory_index).0
 }
@@ -212,7 +221,10 @@ pub unsafe extern "C" fn wasmer_vm_imported_memory32_size(
     vmctx: *mut VMContext,
     memory_index: u32,
 ) -> u32 {
-    log::trace!("vm_imported_memory32_size called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_imported_memory32_size called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     let instance = (&*vmctx).instance();
     let memory_index = MemoryIndex::from_u32(memory_index);
@@ -234,7 +246,10 @@ pub unsafe extern "C" fn wasmer_vm_table_copy(
     src: u32,
     len: u32,
 ) {
-    log::trace!("vm_table_copy called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_table_copy called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     let result = {
         let dst_table_index = TableIndex::from_u32(dst_table_index);
@@ -263,7 +278,12 @@ pub unsafe extern "C" fn wasmer_vm_table_init(
     src: u32,
     len: u32,
 ) {
-    log::trace!("vm_table_init called with index {}:{} for vmcontext at {:#X}", table_index, elem_index, vmctx as usize);
+    log::trace!(
+        "vm_table_init called with index {}:{} for vmcontext at {:#X}",
+        table_index,
+        elem_index,
+        vmctx as usize
+    );
 
     let result = {
         let table_index = TableIndex::from_u32(table_index);
@@ -289,7 +309,10 @@ pub unsafe extern "C" fn wasmer_vm_table_fill(
     item: RawTableElement,
     len: u32,
 ) {
-    log::trace!("vm_table_fill called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_table_fill called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     let result = {
         let table_index = TableIndex::from_u32(table_index);
@@ -314,7 +337,10 @@ pub unsafe extern "C" fn wasmer_vm_table_fill(
 /// `vmctx` must be dereferenceable.
 #[no_mangle]
 pub unsafe extern "C" fn wasmer_vm_table_size(vmctx: *mut VMContext, table_index: u32) -> u32 {
-    log::trace!("vm_table_size called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_table_size called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     let instance = (&*vmctx).instance();
     let table_index = LocalTableIndex::from_u32(table_index);
@@ -332,7 +358,10 @@ pub unsafe extern "C" fn wasmer_vm_imported_table_size(
     vmctx: *mut VMContext,
     table_index: u32,
 ) -> u32 {
-    log::trace!("vm_imported_table_size called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_imported_table_size called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     let instance = (&*vmctx).instance();
     let table_index = TableIndex::from_u32(table_index);
@@ -351,7 +380,12 @@ pub unsafe extern "C" fn wasmer_vm_table_get(
     table_index: u32,
     elem_index: u32,
 ) -> RawTableElement {
-    log::trace!("vm_table_get called with index {}:{} for vmcontext at {:#X}", table_index, elem_index, vmctx as usize);
+    log::trace!(
+        "vm_table_get called with index {}:{} for vmcontext at {:#X}",
+        table_index,
+        elem_index,
+        vmctx as usize
+    );
 
     let instance = (&*vmctx).instance();
     let table_index = LocalTableIndex::from_u32(table_index);
@@ -374,7 +408,12 @@ pub unsafe extern "C" fn wasmer_vm_imported_table_get(
     table_index: u32,
     elem_index: u32,
 ) -> RawTableElement {
-    log::trace!("vm_imported_table_get called with index {}:{} for vmcontext at {:#X}", table_index, elem_index, vmctx as usize);
+    log::trace!(
+        "vm_imported_table_get called with index {}:{} for vmcontext at {:#X}",
+        table_index,
+        elem_index,
+        vmctx as usize
+    );
 
     let instance = (&*vmctx).instance();
     let table_index = TableIndex::from_u32(table_index);
@@ -436,7 +475,10 @@ pub unsafe extern "C" fn wasmer_vm_imported_table_set(
     elem_index: u32,
     value: RawTableElement,
 ) {
-    log::trace!("vm_imported_table_set called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_imported_table_set called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     let instance = (&*vmctx).instance();
     let table_index = TableIndex::from_u32(table_index);
@@ -465,7 +507,10 @@ pub unsafe extern "C" fn wasmer_vm_table_grow(
     delta: u32,
     table_index: u32,
 ) -> u32 {
-    log::trace!("vm_table_grow called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_table_grow called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     let instance = (&*vmctx).instance();
     let table_index = LocalTableIndex::from_u32(table_index);
@@ -493,7 +538,10 @@ pub unsafe extern "C" fn wasmer_vm_imported_table_grow(
     delta: u32,
     table_index: u32,
 ) -> u32 {
-    log::trace!("vm_imported_table_grow called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_imported_table_grow called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     let instance = (&*vmctx).instance();
     let table_index = TableIndex::from_u32(table_index);
@@ -582,7 +630,10 @@ pub unsafe extern "C" fn wasmer_vm_memory32_copy(
     src: u32,
     len: u32,
 ) {
-    log::trace!("vm_memory32_copy called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_memory32_copy called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     let result = {
         let memory_index = LocalMemoryIndex::from_u32(memory_index);
@@ -607,7 +658,10 @@ pub unsafe extern "C" fn wasmer_vm_imported_memory32_copy(
     src: u32,
     len: u32,
 ) {
-    log::trace!("vm_imported_memory32_copy called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_imported_memory32_copy called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     let result = {
         let memory_index = MemoryIndex::from_u32(memory_index);
@@ -632,7 +686,10 @@ pub unsafe extern "C" fn wasmer_vm_memory32_fill(
     val: u32,
     len: u32,
 ) {
-    log::trace!("vm_memory32_fill called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_memory32_fill called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     let result = {
         let memory_index = LocalMemoryIndex::from_u32(memory_index);
@@ -657,7 +714,10 @@ pub unsafe extern "C" fn wasmer_vm_imported_memory32_fill(
     val: u32,
     len: u32,
 ) {
-    log::trace!("vm_imported_memory32_fill called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_imported_memory32_fill called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     let result = {
         let memory_index = MemoryIndex::from_u32(memory_index);
@@ -683,7 +743,10 @@ pub unsafe extern "C" fn wasmer_vm_memory32_init(
     src: u32,
     len: u32,
 ) {
-    log::trace!("vm_memory32_init called for vmcontext at {:#X}", vmctx as usize);
+    log::trace!(
+        "vm_memory32_init called for vmcontext at {:#X}",
+        vmctx as usize
+    );
 
     let result = {
         let memory_index = MemoryIndex::from_u32(memory_index);

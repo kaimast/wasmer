@@ -77,8 +77,7 @@ impl Mmap {
         } else {
             let label = std::ffi::CString::new("wasmer").unwrap();
             let flags = nix::sys::memfd::MemFdCreateFlag::empty();
-            nix::sys::memfd::memfd_create(&label, flags)
-                    .expect("Failed to create memfd")
+            nix::sys::memfd::memfd_create(&label, flags).expect("Failed to create memfd")
         };
 
         nix::unistd::ftruncate(memfd, mapping_size as i64).expect("Failed to resize memfd");
@@ -98,14 +97,20 @@ impl Mmap {
             };
 
             let ptr = ptr as usize;
-            log::trace!("Memory mapped {} bytes to {:#X}-{:#X}", mapping_size, ptr, ptr+mapping_size);
+            log::trace!(
+                "Memory mapped {} bytes to {:#X}-{:#X}",
+                mapping_size,
+                ptr,
+                ptr + mapping_size
+            );
 
             if ptr as isize == -1_isize {
                 return Err(io::Error::last_os_error().to_string());
             }
 
             Self {
-                ptr, len: mapping_size,
+                ptr,
+                len: mapping_size,
                 memfd: Some(memfd),
             }
         } else {
@@ -123,14 +128,20 @@ impl Mmap {
             };
 
             let ptr = ptr as usize;
-            log::trace!("Memory mapped {} bytes to {:#X}-{:#X}", mapping_size, ptr, ptr+mapping_size);
+            log::trace!(
+                "Memory mapped {} bytes to {:#X}-{:#X}",
+                mapping_size,
+                ptr,
+                ptr + mapping_size
+            );
 
             if ptr as isize == -1_isize {
                 return Err(io::Error::last_os_error().to_string());
             }
 
             let mut result = Self {
-                ptr, len: mapping_size,
+                ptr,
+                len: mapping_size,
                 memfd: Some(memfd),
             };
 
@@ -190,10 +201,16 @@ impl Mmap {
             }
 
             let ptr = ptr as usize;
-            log::trace!("Memory mapped {} bytes to {:#X}-{:#X}", mapping_size, ptr, ptr+mapping_size);
+            log::trace!(
+                "Memory mapped {} bytes to {:#X}-{:#X}",
+                mapping_size,
+                ptr,
+                ptr + mapping_size
+            );
 
             Self {
-                ptr, len: mapping_size,
+                ptr,
+                len: mapping_size,
             }
         } else {
             // Reserve the mapping size.
@@ -204,10 +221,16 @@ impl Mmap {
             }
 
             let ptr = ptr as usize;
-            log::trace!("Memory mapped {} bytes to {:#X}-{:#X}", mapping_size, ptr, ptr+mapping_size);
+            log::trace!(
+                "Memory mapped {} bytes to {:#X}-{:#X}",
+                mapping_size,
+                ptr,
+                ptr + mapping_size
+            );
 
             let mut result = Self {
-                ptr, len: mapping_size,
+                ptr,
+                len: mapping_size,
             };
 
             if accessible_size != 0 {
@@ -306,23 +329,31 @@ impl Mmap {
             return Err(String::from("Not a Zygote"));
         };
 
-        let ptr = unsafe{ libc::mmap(
-            ptr::null_mut(),
-            self.len,
-            libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_PRIVATE,
-            memfd,
-            0,
-        )} as usize;
+        let ptr = unsafe {
+            libc::mmap(
+                ptr::null_mut(),
+                self.len,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_PRIVATE,
+                memfd,
+                0,
+            )
+        } as usize;
 
         if ptr as isize == -1_isize {
             return Err(io::Error::last_os_error().to_string());
         }
 
-        log::trace!("Duplicated memory from {:#X} to {:#X} ({} bytes)", self.ptr, ptr, self.len);
+        log::trace!(
+            "Duplicated memory from {:#X} to {:#X} ({} bytes)",
+            self.ptr,
+            ptr,
+            self.len
+        );
 
         Ok(Self {
-            ptr, len: self.len,
+            ptr,
+            len: self.len,
             memfd: None,
         })
     }
@@ -332,7 +363,12 @@ impl Drop for Mmap {
     #[cfg(not(target_os = "windows"))]
     fn drop(&mut self) {
         if self.len != 0 {
-            log::trace!("Memory unmapping {} bytes at {:#X}-{:#X}", self.len, self.ptr, self.ptr+self.len);
+            log::trace!(
+                "Memory unmapping {} bytes at {:#X}-{:#X}",
+                self.len,
+                self.ptr,
+                self.ptr + self.len
+            );
 
             let r = unsafe { libc::munmap(self.ptr as *mut libc::c_void, self.len) };
             assert_eq!(r, 0, "munmap failed: {}", io::Error::last_os_error());
@@ -347,7 +383,12 @@ impl Drop for Mmap {
     #[cfg(target_os = "windows")]
     fn drop(&mut self) {
         if self.len != 0 {
-            log::trace!("Memory unmapping {} bytes at {:#X}-{:#X}", self.len, self.ptr, self.ptr+self.len);
+            log::trace!(
+                "Memory unmapping {} bytes at {:#X}-{:#X}",
+                self.len,
+                self.ptr,
+                self.ptr + self.len
+            );
 
             use winapi::ctypes::c_void;
             use winapi::um::memoryapi::VirtualFree;

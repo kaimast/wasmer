@@ -118,7 +118,7 @@ impl Instance {
     /// Those are, as defined by the spec:
     ///  * Link errors that happen when plugging the imports into the instance
     ///  * Runtime errors that happen when running the module `start` function.
-    #[ tracing::instrument(skip(resolver)) ]
+    #[tracing::instrument(skip(resolver))]
     pub fn new(
         module: &Module,
         resolver: &(dyn Resolver + Send + Sync),
@@ -169,7 +169,10 @@ impl Instance {
     /// Call a function on a dedicated stack
     /// This allows for async host functions, but may create more overhead
     #[cfg(feature = "async")]
-    pub async fn call_with_stack<V: Into<crate::Val>+Sized+Send, Stack: async_wormhole::stack::Stack + Unpin>(
+    pub async fn call_with_stack<
+        V: Into<crate::Val> + Sized + Send,
+        Stack: async_wormhole::stack::Stack + Unpin,
+    >(
         &self,
         func_name: &str,
         stack: Stack,
@@ -239,7 +242,7 @@ impl Instance {
     }
 
     /// Duplicate the entire state of this instance and create a new one
-    #[ tracing::instrument(skip(resolver)) ]
+    #[tracing::instrument(skip(resolver))]
     pub unsafe fn duplicate(&self, resolver: &dyn Resolver) -> Result<Self, InstantiationError> {
         let artifact = self.module().artifact();
         let module = self.module().clone();
@@ -247,15 +250,20 @@ impl Instance {
         let instance_handle = {
             let old_handle = self.handle.lock().unwrap();
             //FIXME we only need to update the Envs. Do we really need to redo all of this?
-            let imports = wasmer_engine::resolve_imports(module.info(),
-                resolver, artifact.finished_dynamic_function_trampolines(),
-                artifact.memory_styles(), artifact.table_styles()
-            ).unwrap();
+            let imports = wasmer_engine::resolve_imports(
+                module.info(),
+                resolver,
+                artifact.finished_dynamic_function_trampolines(),
+                artifact.memory_styles(),
+                artifact.table_styles(),
+            )
+            .unwrap();
 
             old_handle.duplicate(imports, artifact.signatures())
         };
 
-        let exports = self.module()
+        let exports = self
+            .module()
             .exports()
             .map(|export| {
                 let name = export.name().to_string();
@@ -267,7 +275,8 @@ impl Instance {
 
         let instance = Self {
             handle: Arc::new(Mutex::new(instance_handle)),
-            module, exports,
+            module,
+            exports,
         };
 
         {

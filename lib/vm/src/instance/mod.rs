@@ -18,7 +18,7 @@ use crate::func_data_registry::VMFuncRef;
 use crate::global::Global;
 use crate::imports::Imports;
 use crate::memory::{Memory, MemoryError};
-use crate::table::{Table, LinearTable, TableElement};
+use crate::table::{LinearTable, Table, TableElement};
 use crate::trap::{catch_traps, Trap, TrapCode, TrapHandler};
 use crate::vmcontext::{
     VMBuiltinFunctionsArray, VMCallerCheckedAnyfunc, VMContext, VMFunctionBody,
@@ -485,7 +485,11 @@ impl Instance {
         IntoPages: Into<Pages>,
     {
         let delta = delta.into();
-        log::trace!("Got request to grow memory #{} by {} page(s)", memory_index.index(), delta.0);
+        log::trace!(
+            "Got request to grow memory #{} by {} page(s)",
+            memory_index.index(),
+            delta.0
+        );
 
         let mem = self
             .memories
@@ -838,19 +842,18 @@ impl Instance {
 
         if src
             .checked_add(len)
-            .map_or(true, |n| n as usize > data.len()) {
+            .map_or(true, |n| n as usize > data.len())
+        {
             log::debug!("memory_init tried to access out of bounds source memory at {:#X}-{:#X}, but data len is {:#X}", src, src.checked_add(len).unwrap_or(0), data.len());
             Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
-
-        } else if  dst
-                .checked_add(len)
-                .map_or(true, |m| m > memory.current_length.try_into().unwrap())
+        } else if dst
+            .checked_add(len)
+            .map_or(true, |m| m > memory.current_length.try_into().unwrap())
         {
             log::debug!("memory_init tried to access out of bounds destination memory at {:#X}-{:#X}, but data len is {:#X}", dst, dst.checked_add(len).unwrap_or(0), data.len());
- 
+
             Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
         } else {
-
             let src_slice = &data[src as usize..(src + len) as usize];
 
             unsafe {
@@ -892,7 +895,11 @@ impl Instance {
 
     /// Create an identical copy of this instance
     /// This mirrors `Self::new` as much as possible
-    pub(crate) unsafe fn duplicate(&self, mut imports: Imports, vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>) -> InstanceRef {
+    pub(crate) unsafe fn duplicate(
+        &self,
+        mut imports: Imports,
+        vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
+    ) -> InstanceRef {
         let (allocator, memory_definition_locations, table_definition_locations) =
             InstanceAllocator::new(&*self.module);
 
@@ -911,19 +918,25 @@ impl Instance {
         // duplicate tables
         // TODO make more efficient / use mmap
         let tables = {
-            let mut tables = PrimaryMap::<LocalTableIndex, Arc<(dyn Table+'static)>>::new();
+            let mut tables = PrimaryMap::<LocalTableIndex, Arc<(dyn Table + 'static)>>::new();
             for (pos, (index, old_table)) in self.tables.iter().enumerate() {
                 assert_eq!(pos, index.index());
 
                 let table_loc = table_definition_locations[index.index()];
-                let table = LinearTable::from_definition(old_table.ty(), old_table.style(), table_loc).expect("Failed to create table");
+                let table =
+                    LinearTable::from_definition(old_table.ty(), old_table.style(), table_loc)
+                        .expect("Failed to create table");
 
                 // Note, most of this will be overwritten later by initialize_tables
                 for idx in 0..old_table.size() {
                     table.set(idx, old_table.get(idx).unwrap()).unwrap();
                 }
 
-                log::trace!("Cloned {} elements for table #{}", old_table.size(), index.index());
+                log::trace!(
+                    "Cloned {} elements for table #{}",
+                    old_table.size(),
+                    index.index()
+                );
 
                 tables.push(Arc::new(table));
             }
@@ -938,7 +951,9 @@ impl Instance {
                 assert_eq!(pos, index.index());
 
                 let mem_loc = memory_definition_locations[index.index()];
-                let memcopy = memory.duplicate(mem_loc).expect("Failed to duplicate memory");
+                let memcopy = memory
+                    .duplicate(mem_loc)
+                    .expect("Failed to duplicate memory");
                 memories.push(memcopy);
             }
 
@@ -985,7 +1000,11 @@ impl Instance {
             let instance = Instance {
                 module: self.module.clone(),
                 offsets: offsets.clone(),
-                memories, tables, funcrefs, globals, passive_data,
+                memories,
+                tables,
+                funcrefs,
+                globals,
+                passive_data,
                 functions: self.functions.clone(),
                 function_call_trampolines: self.function_call_trampolines.clone(),
                 passive_elements: Default::default(),
@@ -1066,7 +1085,11 @@ impl Instance {
             VMBuiltinFunctionsArray::initialized(),
         );
 
-        log::trace!("New vmcontext at {:#X} (duplicated from {:#X})", vmctx_ptr as usize, parent_vmctx_ptr as usize);
+        log::trace!(
+            "New vmcontext at {:#X} (duplicated from {:#X})",
+            vmctx_ptr as usize,
+            parent_vmctx_ptr as usize
+        );
 
         // Override globals
         ptr::copy(
@@ -1310,7 +1333,10 @@ impl InstanceHandle {
         let instance = self.instance().clone();
         let instance_ref = instance.as_ref();
 
-        log::trace!("Exporting function with vmcontext at {:#X}", instance_ref.vmctx_ptr() as usize);
+        log::trace!(
+            "Exporting function with vmcontext at {:#X}",
+            instance_ref.vmctx_ptr() as usize
+        );
 
         match export {
             ExportIndex::Function(index) => {
@@ -1505,21 +1531,26 @@ impl InstanceHandle {
     }
 
     /// Create an identical copy of this instance
-    pub unsafe fn duplicate(&self, imports: Imports, vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>) -> Self {
+    pub unsafe fn duplicate(
+        &self,
+        imports: Imports,
+        vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
+    ) -> Self {
         let iref = self.instance().as_ref();
         let instance = iref.duplicate(imports, vmshared_signatures);
 
-        Self{ instance }
+        Self { instance }
     }
 
     /// TODO
-    pub fn finish_duplication(&self,
-        _data_initializers: &[DataInitializer<'_>],
-    ) {
+    pub fn finish_duplication(&self, _data_initializers: &[DataInitializer<'_>]) {
         let iref = self.instance().as_ref();
         let vmctx_ptr = iref.vmctx_ptr();
 
-        log::trace!("Finishing duplication for instance with vmctx {:#X}", vmctx_ptr as usize);
+        log::trace!(
+            "Finishing duplication for instance with vmctx {:#X}",
+            vmctx_ptr as usize
+        );
         initialize_tables(iref).expect("init_tables");
         //initialize_memories(iref, data_initializers).unwrap();
     }
@@ -1707,7 +1738,10 @@ fn build_funcrefs(
     vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
     vmctx_ptr: *mut VMContext,
 ) -> BoxedSlice<FunctionIndex, VMCallerCheckedAnyfunc> {
-    log::trace!("Buildings function references for vmcontext at {:#X}", vmctx_ptr as usize);
+    log::trace!(
+        "Buildings function references for vmcontext at {:#X}",
+        vmctx_ptr as usize
+    );
 
     let mut func_refs = PrimaryMap::with_capacity(module_info.functions.len());
 

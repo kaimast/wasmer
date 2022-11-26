@@ -17,8 +17,8 @@ use std::cell::UnsafeCell;
 use std::convert::TryInto;
 use std::fmt;
 use std::ptr::NonNull;
-use std::sync::Mutex;
 use std::sync::Arc;
+use std::sync::Mutex;
 use thiserror::Error;
 use wasmer_types::{Bytes, MemoryType, Pages};
 
@@ -123,7 +123,10 @@ pub trait Memory: fmt::Debug + Send + Sync + MemoryUsage {
     fn vmmemory(&self) -> NonNull<VMMemoryDefinition>;
 
     /// Create an identical copy of this memory
-    fn duplicate(&self, vm_memory_location: NonNull<VMMemoryDefinition>) -> Result<Arc<dyn Memory>, String>;
+    fn duplicate(
+        &self,
+        vm_memory_location: NonNull<VMMemoryDefinition>,
+    ) -> Result<Arc<dyn Memory>, String>;
 }
 
 /// A linear memory instance.
@@ -189,7 +192,10 @@ struct WasmMmap {
 impl WasmMmap {
     fn duplicate(&self) -> Result<Self, String> {
         let alloc = self.alloc.duplicate()?;
-        Ok(Self{ alloc, size: self.size })
+        Ok(Self {
+            alloc,
+            size: self.size,
+        })
     }
 }
 
@@ -414,7 +420,6 @@ impl Memory for LinearMemory {
                 // Create new mmap that uses the same underlying memfd
                 mmap.alloc = Mmap::accessible_reserved(new_bytes, request_bytes, Some(memfd))
                     .map_err(MemoryError::Region)?;
-
             } else {
                 //FIXME don't copy here
 
@@ -422,7 +427,8 @@ impl Memory for LinearMemory {
                     .map_err(MemoryError::Region)?;
 
                 let copy_len = mmap.alloc.len() - self.offset_guard_size;
-                new_mmap.as_mut_slice()[..copy_len].copy_from_slice(&mmap.alloc.as_slice()[..copy_len]);
+                new_mmap.as_mut_slice()[..copy_len]
+                    .copy_from_slice(&mmap.alloc.as_slice()[..copy_len]);
 
                 mmap.alloc = new_mmap;
             }
@@ -453,8 +459,11 @@ impl Memory for LinearMemory {
     }
 
     // Create an identical copy of this memory
-    fn duplicate(&self, mut mem_loc: NonNull<VMMemoryDefinition>) -> Result<Arc<dyn Memory>, String> {
-        if !matches!(self.style, MemoryStyle::Dynamic{..}) {
+    fn duplicate(
+        &self,
+        mut mem_loc: NonNull<VMMemoryDefinition>,
+    ) -> Result<Arc<dyn Memory>, String> {
+        if !matches!(self.style, MemoryStyle::Dynamic { .. }) {
             return Err(String::from("Can only duplicate dynamic memory"));
         }
 
@@ -465,9 +474,9 @@ impl Memory for LinearMemory {
 
         let vm_memory_definition = match self.vm_memory_definition {
             VMMemoryDefinitionOwnership::VMOwned(old_loc) => {
-                let md = unsafe{ mem_loc.as_mut() };
+                let md = unsafe { mem_loc.as_mut() };
                 md.base = mmap.alloc.as_mut_ptr() as _;
-                md.current_length = unsafe{ old_loc.as_ref().current_length };
+                md.current_length = unsafe { old_loc.as_ref().current_length };
                 VMMemoryDefinitionOwnership::VMOwned(mem_loc)
             }
             VMMemoryDefinitionOwnership::HostOwned(_) => {
@@ -475,14 +484,14 @@ impl Memory for LinearMemory {
             }
         };
 
-        Ok(Arc::new(Self{
+        Ok(Arc::new(Self {
             style: self.style.clone(),
             mmap: Mutex::new(mmap),
             maximum: self.maximum,
             memory: self.memory,
             needs_signal_handlers: self.needs_signal_handlers,
             offset_guard_size: self.offset_guard_size,
-            vm_memory_definition
+            vm_memory_definition,
         }))
     }
 }

@@ -63,7 +63,7 @@ pub fn compiler_test(attrs: TokenStream, input: TokenStream) -> TokenStream {
             compiler_name,
             engine_name
         )
-        .replace(" ", "");
+        .replace(' ', "");
 
         ignores.should_ignore_host(&engine_name, &compiler_name, &full_path)
     };

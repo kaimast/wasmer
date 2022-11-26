@@ -726,12 +726,7 @@ impl Artifact for DylibArtifact {
                 // and the emitted size by the address map
                 let ptr = function_pointer;
                 let length = current_size_by_ptr;
-                let first = (
-                    index,
-                    FunctionExtent {
-                        ptr: *ptr, length,
-                    },
-                );
+                let first = (index, FunctionExtent { ptr: *ptr, length });
                 std::iter::once(first)
                     .chain(iter.map(|(index, function_pointer)| {
                         let fp = **function_pointer as usize;
@@ -749,12 +744,7 @@ impl Artifact for DylibArtifact {
                         // and the emitted size by the address map
                         let ptr = function_pointer;
                         let length = current_size_by_ptr;
-                        (
-                            index,
-                            FunctionExtent {
-                                ptr: *ptr, length,
-                            },
-                        )
+                        (index, FunctionExtent { ptr: *ptr, length })
                     }))
                     .collect::<Vec<_>>()
             })

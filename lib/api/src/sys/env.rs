@@ -188,7 +188,6 @@ impl<T> LazyInit<T> {
         }
         self.initialized = true;
     }
-
 }
 
 impl<T: std::fmt::Debug> std::fmt::Debug for LazyInit<T> {

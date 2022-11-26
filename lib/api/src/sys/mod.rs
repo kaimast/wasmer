@@ -30,10 +30,11 @@ pub mod internals {
 pub use crate::sys::cell::WasmCell;
 pub use crate::sys::env::{HostEnvInitError, LazyInit, WasmerEnv};
 pub use crate::sys::exports::{ExportError, Exportable, Exports, ExportsIterator};
+#[cfg(feature = "async")]
+pub use crate::sys::externals::Yielder;
 pub use crate::sys::externals::{
     Extern, FromToNativeWasmType, Function, Global, HostFunction, Memory, Table, WasmTypeList,
 };
-#[cfg(feature="async")] pub use crate::sys::externals::Yielder;
 
 pub use crate::sys::import_object::{ImportObject, ImportObjectIterator, LikeNamespace};
 pub use crate::sys::instance::{Instance, InstantiationError};
