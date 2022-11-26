@@ -105,7 +105,7 @@ impl FuncTranslator {
 
         func.add_attribute(AttributeLoc::Function, intrinsics.stack_probe);
         func.set_personality_function(intrinsics.personality);
-        func.as_global_value().set_section(FUNCTION_SECTION);
+        func.as_global_value().set_section(Some(FUNCTION_SECTION));
         func.set_linkage(Linkage::DLLExport);
         func.as_global_value()
             .set_dll_storage_class(DLLStorageClass::Export);

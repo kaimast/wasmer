@@ -68,7 +68,7 @@ impl FuncTrampoline {
         let trampoline_func = module.add_function(name, trampoline_ty, Some(Linkage::External));
         trampoline_func
             .as_global_value()
-            .set_section(FUNCTION_SECTION);
+            .set_section(Some(FUNCTION_SECTION));
         trampoline_func
             .as_global_value()
             .set_linkage(Linkage::DLLExport);
@@ -194,7 +194,7 @@ impl FuncTrampoline {
         }
         trampoline_func
             .as_global_value()
-            .set_section(FUNCTION_SECTION);
+            .set_section(Some(FUNCTION_SECTION));
         trampoline_func
             .as_global_value()
             .set_linkage(Linkage::DLLExport);
