@@ -59,7 +59,7 @@ impl FuncTrampoline {
         let trampoline_ty = intrinsics.void_ty.fn_type(
             &[
                 intrinsics.ctx_ptr_ty.into(),                     // vmctx ptr
-                callee_ty.ptr_type(AddressSpace::Generic).into(), // callee function address
+                callee_ty.ptr_type(AddressSpace::default()).into(), // callee function address
                 intrinsics.i128_ptr_ty.into(),                    // in/out values ptr
             ],
             false,
@@ -369,7 +369,7 @@ impl FuncTrampoline {
                 )
             };
             let ptr =
-                builder.build_pointer_cast(ptr, v.get_type().ptr_type(AddressSpace::Generic), "");
+                builder.build_pointer_cast(ptr, v.get_type().ptr_type(AddressSpace::default()), "");
             builder.build_store(ptr, *v);
             if v.get_type() == intrinsics.i128_ty.as_basic_type_enum() {
                 idx += 1;
@@ -434,12 +434,12 @@ impl FuncTrampoline {
                 ],
                 false,
             )
-            .ptr_type(AddressSpace::Generic);
+            .ptr_type(AddressSpace::default());
         let vmctx = self.abi.get_vmctx_ptr_param(&trampoline_func);
         let callee = builder
             .build_load(
                 builder
-                    .build_bitcast(vmctx, callee_ty.ptr_type(AddressSpace::Generic), "")
+                    .build_bitcast(vmctx, callee_ty.ptr_type(AddressSpace::default()), "")
                     .into_pointer_value(),
                 "",
             )

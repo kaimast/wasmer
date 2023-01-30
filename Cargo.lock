@@ -291,9 +291,9 @@ dependencies = [
 
 [[package]]
 name = "bitflags"
-version = "1.2.1"
+version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
+checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "blake3"
@@ -1317,9 +1317,9 @@ dependencies = [
 
 [[package]]
 name = "inkwell"
-version = "0.1.0-beta.5"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbf1a87420b951955e73842ebaa896db368a0a2f0ba214c517e6e04b282d9890"
+checksum = "f6572fb91d5e09a2a40c99721bdf94ed554a74b09db684276cb1bba39e844da4"
 dependencies = [
  "either",
  "inkwell_internals",
@@ -1331,9 +1331,9 @@ dependencies = [
 
 [[package]]
 name = "inkwell_internals"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "543392867ee87319c5c0701881c968511c24cf2f844c53bc224badc525f02144"
+checksum = "87d00c17e264ce02be5bc23d7bff959188ec7137beddd06b8b6b05a7c680ea85"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1626,15 +1626,14 @@ checksum = "7843ec2de400bcbc6a6328c958dc38e5359da6e93e72e37bc5246bf1ae776389"
 
 [[package]]
 name = "nix"
-version = "0.20.2"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5e06129fb611568ef4e868c14b326274959aa70ff7776e9d55323531c374945"
+checksum = "fa9b4819da1bc61c0ea48b63b7bc8604064dd43013e7cc325df098d49cd7c18a"
 dependencies = [
  "bitflags",
  "cc",
  "cfg-if 1.0.0",
  "libc",
- "memoffset 0.6.5",
 ]
 
 [[package]]
@@ -3753,7 +3752,7 @@ dependencies = [
  "bitflags",
  "downcast-rs",
  "libc",
- "nix 0.20.2",
+ "nix 0.20.0",
  "wayland-commons",
  "wayland-scanner",
  "wayland-sys",
@@ -3765,7 +3764,7 @@ version = "0.28.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a21817947c7011bbd0a27e11b17b337bfd022e8544b071a2641232047966fbda"
 dependencies = [
- "nix 0.20.2",
+ "nix 0.20.0",
  "once_cell",
  "smallvec",
  "wayland-sys",
@@ -3777,7 +3776,7 @@ version = "0.28.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be610084edd1586d45e7bdd275fe345c7c1873598caa464c4fb835dee70fa65a"
 dependencies = [
- "nix 0.20.2",
+ "nix 0.20.0",
  "wayland-client",
  "xcursor",
 ]

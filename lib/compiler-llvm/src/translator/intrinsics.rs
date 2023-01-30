@@ -41,8 +41,8 @@ pub fn type_to_llvm_ptr<'ctx>(
         Type::F32 => Ok(intrinsics.f32_ptr_ty),
         Type::F64 => Ok(intrinsics.f64_ptr_ty),
         Type::V128 => Ok(intrinsics.i128_ptr_ty),
-        Type::FuncRef => Ok(intrinsics.funcref_ty.ptr_type(AddressSpace::Generic)),
-        Type::ExternRef => Ok(intrinsics.externref_ty.ptr_type(AddressSpace::Generic)),
+        Type::FuncRef => Ok(intrinsics.funcref_ty.ptr_type(AddressSpace::default())),
+        Type::ExternRef => Ok(intrinsics.externref_ty.ptr_type(AddressSpace::default())),
     }
 }
 
@@ -293,14 +293,14 @@ impl<'ctx> Intrinsics<'ctx> {
         let f64x2_ty = f64_ty.vec_type(2);
         let i32x8_ty = i32_ty.vec_type(8);
 
-        let i8_ptr_ty = i8_ty.ptr_type(AddressSpace::Generic);
-        let i16_ptr_ty = i16_ty.ptr_type(AddressSpace::Generic);
-        let i32_ptr_ty = i32_ty.ptr_type(AddressSpace::Generic);
-        let i64_ptr_ty = i64_ty.ptr_type(AddressSpace::Generic);
-        let i128_ptr_ty = i128_ty.ptr_type(AddressSpace::Generic);
-        let isize_ptr_ty = isize_ty.ptr_type(AddressSpace::Generic);
-        let f32_ptr_ty = f32_ty.ptr_type(AddressSpace::Generic);
-        let f64_ptr_ty = f64_ty.ptr_type(AddressSpace::Generic);
+        let i8_ptr_ty = i8_ty.ptr_type(AddressSpace::default());
+        let i16_ptr_ty = i16_ty.ptr_type(AddressSpace::default());
+        let i32_ptr_ty = i32_ty.ptr_type(AddressSpace::default());
+        let i64_ptr_ty = i64_ty.ptr_type(AddressSpace::default());
+        let i128_ptr_ty = i128_ty.ptr_type(AddressSpace::default());
+        let isize_ptr_ty = isize_ty.ptr_type(AddressSpace::default());
+        let f32_ptr_ty = f32_ty.ptr_type(AddressSpace::default());
+        let f64_ptr_ty = f64_ty.ptr_type(AddressSpace::default());
 
         let i1_zero = i1_ty.const_int(0, false);
         let i8_zero = i8_ty.const_int(0, false);
@@ -347,7 +347,7 @@ impl<'ctx> Intrinsics<'ctx> {
         let md_ty_basic_md: BasicMetadataTypeEnum = md_ty.into();
 
         let ctx_ty = i8_ty;
-        let ctx_ptr_ty = ctx_ty.ptr_type(AddressSpace::Generic);
+        let ctx_ptr_ty = ctx_ty.ptr_type(AddressSpace::default());
         let ctx_ptr_ty_basic = ctx_ptr_ty.as_basic_type_enum();
         let ctx_ptr_ty_basic_md: BasicMetadataTypeEnum = ctx_ptr_ty.into();
 
@@ -357,7 +357,7 @@ impl<'ctx> Intrinsics<'ctx> {
             &[i8_ptr_ty_basic, sigindex_ty.into(), ctx_ptr_ty_basic],
             false,
         );
-        let funcref_ty = anyfunc_ty.ptr_type(AddressSpace::Generic);
+        let funcref_ty = anyfunc_ty.ptr_type(AddressSpace::default());
         let externref_ty = funcref_ty;
         let anyref_ty = i8_ptr_ty;
         let anyref_ty_basic_md: BasicMetadataTypeEnum = anyref_ty.into();
@@ -1011,13 +1011,13 @@ impl<'ctx> Intrinsics<'ctx> {
 
             vmfunction_import_ptr_ty: context
                 .struct_type(&[i8_ptr_ty_basic, i8_ptr_ty_basic], false)
-                .ptr_type(AddressSpace::Generic),
+                .ptr_type(AddressSpace::default()),
             vmfunction_import_body_element: 0,
             vmfunction_import_vmctx_element: 1,
 
             vmmemory_definition_ptr_ty: context
                 .struct_type(&[i8_ptr_ty_basic, isize_ty.into()], false)
-                .ptr_type(AddressSpace::Generic),
+                .ptr_type(AddressSpace::default()),
             vmmemory_definition_base_element: 0,
             vmmemory_definition_current_length_element: 1,
 
@@ -1026,19 +1026,19 @@ impl<'ctx> Intrinsics<'ctx> {
                     &[ctx_ptr_ty_basic_md, i32_ty_basic_md, i32_ty_basic_md],
                     false,
                 )
-                .ptr_type(AddressSpace::Generic),
+                .ptr_type(AddressSpace::default()),
             imported_memory32_grow_ptr_ty: i32_ty
                 .fn_type(
                     &[ctx_ptr_ty_basic_md, i32_ty_basic_md, i32_ty_basic_md],
                     false,
                 )
-                .ptr_type(AddressSpace::Generic),
+                .ptr_type(AddressSpace::default()),
             memory32_size_ptr_ty: i32_ty
                 .fn_type(&[ctx_ptr_ty_basic_md, i32_ty_basic_md], false)
-                .ptr_type(AddressSpace::Generic),
+                .ptr_type(AddressSpace::default()),
             imported_memory32_size_ptr_ty: i32_ty
                 .fn_type(&[ctx_ptr_ty_basic_md, i32_ty_basic_md], false)
-                .ptr_type(AddressSpace::Generic),
+                .ptr_type(AddressSpace::default()),
 
             ctx_ptr_ty,
         };
@@ -1163,7 +1163,7 @@ impl<'ctx, 'a> CtxType<'ctx, 'a> {
                     let memory_definition_ptr_ptr = cache_builder
                         .build_bitcast(
                             memory_definition_ptr_ptr,
-                            intrinsics.i8_ptr_ty.ptr_type(AddressSpace::Generic),
+                            intrinsics.i8_ptr_ty.ptr_type(AddressSpace::default()),
                             "",
                         )
                         .into_pointer_value();
@@ -1247,7 +1247,7 @@ impl<'ctx, 'a> CtxType<'ctx, 'a> {
                     let ptr_to_base_ptr = cache_builder
                         .build_bitcast(
                             ptr_to_base_ptr,
-                            intrinsics.i8_ptr_ty.ptr_type(AddressSpace::Generic),
+                            intrinsics.i8_ptr_ty.ptr_type(AddressSpace::default()),
                             "",
                         )
                         .into_pointer_value();
@@ -1273,7 +1273,7 @@ impl<'ctx, 'a> CtxType<'ctx, 'a> {
                     let definition_ptr_ptr = cache_builder
                         .build_bitcast(
                             definition_ptr_ptr,
-                            intrinsics.i8_ptr_ty.ptr_type(AddressSpace::Generic),
+                            intrinsics.i8_ptr_ty.ptr_type(AddressSpace::default()),
                             "",
                         )
                         .into_pointer_value();
@@ -1295,7 +1295,7 @@ impl<'ctx, 'a> CtxType<'ctx, 'a> {
                     let ptr_to_base_ptr = cache_builder
                         .build_bitcast(
                             ptr_to_base_ptr,
-                            intrinsics.i8_ptr_ty.ptr_type(AddressSpace::Generic),
+                            intrinsics.i8_ptr_ty.ptr_type(AddressSpace::default()),
                             "",
                         )
                         .into_pointer_value();
@@ -1417,7 +1417,7 @@ impl<'ctx, 'a> CtxType<'ctx, 'a> {
                     let global_ptr_ptr = cache_builder
                         .build_bitcast(
                             global_ptr_ptr,
-                            intrinsics.i32_ptr_ty.ptr_type(AddressSpace::Generic),
+                            intrinsics.i32_ptr_ty.ptr_type(AddressSpace::default()),
                             "",
                         )
                         .into_pointer_value();
@@ -1556,7 +1556,7 @@ impl<'ctx, 'a> CtxType<'ctx, 'a> {
                     .unwrap();
                 let body_ptr = cache_builder.build_load(body_ptr_ptr, "");
                 let body_ptr = cache_builder
-                    .build_bitcast(body_ptr, llvm_func_type.ptr_type(AddressSpace::Generic), "")
+                    .build_bitcast(body_ptr, llvm_func_type.ptr_type(AddressSpace::default()), "")
                     .into_pointer_value();
                 let vmctx_ptr_ptr = cache_builder
                     .build_struct_gep(
@@ -1606,7 +1606,7 @@ impl<'ctx, 'a> CtxType<'ctx, 'a> {
             let grow_fn_ptr_ptr = cache_builder
                 .build_bitcast(
                     grow_fn_ptr_ptr,
-                    grow_fn_ty.ptr_type(AddressSpace::Generic),
+                    grow_fn_ty.ptr_type(AddressSpace::default()),
                     "",
                 )
                 .into_pointer_value();
@@ -1647,7 +1647,7 @@ impl<'ctx, 'a> CtxType<'ctx, 'a> {
             let size_fn_ptr_ptr = cache_builder
                 .build_bitcast(
                     size_fn_ptr_ptr,
-                    size_fn_ty.ptr_type(AddressSpace::Generic),
+                    size_fn_ty.ptr_type(AddressSpace::default()),
                     "",
                 )
                 .into_pointer_value();

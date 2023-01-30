@@ -2332,7 +2332,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
                 // element type.
                 let casted_table_base = self.builder.build_pointer_cast(
                     table_base,
-                    self.intrinsics.funcref_ty.ptr_type(AddressSpace::Generic),
+                    self.intrinsics.funcref_ty.ptr_type(AddressSpace::default()),
                     "casted_table_base",
                 );
 
@@ -2501,7 +2501,7 @@ impl<'ctx, 'a> LLVMFunctionCodeGenerator<'ctx, 'a> {
 
                 let typed_func_ptr = self.builder.build_pointer_cast(
                     func_ptr,
-                    llvm_func_type.ptr_type(AddressSpace::Generic),
+                    llvm_func_type.ptr_type(AddressSpace::default()),
                     "typed_func_ptr",
                 );
 
