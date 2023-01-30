@@ -17,7 +17,7 @@ maintenance = { status = "experimental" }
 wasmer-wasi = { version = "2.1.1", path = "../wasi", default-features=false }
 tracing = "0.1"
 minifb = "0.19"
-nix = "0.20.2"
+nix = "0.26"
 ref_thread_local = "0.1"
 serde = "1"
 typetag = "0.1"

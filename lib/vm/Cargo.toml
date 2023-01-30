@@ -29,7 +29,7 @@ loupe = { version = "0.1", features = ["enable-indexmap"] }
 winapi = { version = "0.3", features = ["winbase", "memoryapi", "errhandlingapi"] }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
-nix = "0.22"
+nix = "0.26"
 
 [build-dependencies]
 cc = "1.0"
