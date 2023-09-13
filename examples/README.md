@@ -220,18 +220,17 @@ example.
 
 ### Engines
 
-1. [**Universal engine**][engine-universal], explains what an engine is, what the
-   Universal engine is, and how to set it up. The example completes itself
-   with the compilation of the Wasm module, its instantiation, and
-   finally, by calling an exported function.
+1. [**Engine**][engine], explains what an engine is and how to set it up. The
+   example completes itself with the compilation of the Wasm module, its
+   instantiation, and finally, by calling an exported function.
    
-   _Keywords_: Universal, engine, in-memory, executable code.
+   _Keywords_: engine, in-memory, executable code.
    
    <details>
    <summary><em>Execute the example</em></summary>
 
    ```shell
-   $ cargo run --example engine-universal --release --features "cranelift"
+   $ cargo run --example engine --release --features "cranelift"
    ```
 
    </details>
@@ -358,7 +357,7 @@ example.
    </details>
 
 [hello-world]: ./hello_world.rs
-[engine-universal]: ./engine_universal.rs
+[engine]: ./engine.rs
 [engine-headless]: ./engine_headless.rs
 [compiler-singlepass]: ./compiler_singlepass.rs
 [compiler-cranelift]: ./compiler_cranelift.rs
@@ -369,6 +368,8 @@ example.
 [exported-memory]: ./exports_memory.rs
 [imported-global]: ./imports_global.rs
 [imported-function]: ./imports_function.rs
+[imported-function-env]: ./imports_function_env.rs
+[imported-function-env-global]: ./imports_function_env_global.rs
 [instance]: ./instance.rs
 [wasi]: ./wasi.rs
 [wasi-pipes]: ./wasi_pipes.rs

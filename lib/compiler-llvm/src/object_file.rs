@@ -96,6 +96,30 @@ where
     libcalls.insert("wasmer_vm_memory32_init".to_string(), LibCall::Memory32Init);
     libcalls.insert("wasmer_vm_data_drop".to_string(), LibCall::DataDrop);
     libcalls.insert("wasmer_vm_raise_trap".to_string(), LibCall::RaiseTrap);
+    libcalls.insert(
+        "wasmer_vm_memory32_atomic_wait32".to_string(),
+        LibCall::Memory32AtomicWait32,
+    );
+    libcalls.insert(
+        "wasmer_vm_imported_memory32_atomic_wait32".to_string(),
+        LibCall::ImportedMemory32AtomicWait32,
+    );
+    libcalls.insert(
+        "wasmer_vm_memory32_atomic_wait64".to_string(),
+        LibCall::Memory32AtomicWait64,
+    );
+    libcalls.insert(
+        "wasmer_vm_imported_memory32_atomic_wait64".to_string(),
+        LibCall::ImportedMemory32AtomicWait64,
+    );
+    libcalls.insert(
+        "wasmer_vm_memory32_atomic_notify".to_string(),
+        LibCall::Memory32AtomicNotify,
+    );
+    libcalls.insert(
+        "wasmer_vm_imported_memory32_atomic_notify".to_string(),
+        LibCall::ImportedMemory32AtomicNotify,
+    );
 
     let elf = object::File::parse(contents).map_err(map_object_err)?;
 
@@ -172,6 +196,41 @@ where
                 (object::Architecture::Aarch64, object::RelocationKind::PltRelative, 26) => {
                     RelocationKind::Arm64Call
                 }
+                (
+                    object::Architecture::Aarch64,
+                    object::RelocationKind::Elf(object::elf::R_AARCH64_MOVW_UABS_G0_NC),
+                    0,
+                ) => RelocationKind::Arm64Movw0,
+                (
+                    object::Architecture::Aarch64,
+                    object::RelocationKind::Elf(object::elf::R_AARCH64_MOVW_UABS_G1_NC),
+                    0,
+                ) => RelocationKind::Arm64Movw1,
+                (
+                    object::Architecture::Aarch64,
+                    object::RelocationKind::Elf(object::elf::R_AARCH64_MOVW_UABS_G2_NC),
+                    0,
+                ) => RelocationKind::Arm64Movw2,
+                (
+                    object::Architecture::Aarch64,
+                    object::RelocationKind::Elf(object::elf::R_AARCH64_MOVW_UABS_G3),
+                    0,
+                ) => RelocationKind::Arm64Movw3,
+                (
+                    object::Architecture::Riscv64,
+                    object::RelocationKind::Elf(object::elf::R_RISCV_CALL_PLT),
+                    0,
+                ) => RelocationKind::RiscvCall,
+                (
+                    object::Architecture::Riscv64,
+                    object::RelocationKind::Elf(object::elf::R_RISCV_PCREL_HI20),
+                    0,
+                ) => RelocationKind::RiscvPCRelHi20,
+                (
+                    object::Architecture::Riscv64,
+                    object::RelocationKind::Elf(object::elf::R_RISCV_PCREL_LO12_I),
+                    0,
+                ) => RelocationKind::RiscvPCRelLo12I,
                 _ => {
                     return Err(CompileError::Codegen(format!(
                         "unknown relocation {:?}",
@@ -179,7 +238,7 @@ where
                     )));
                 }
             };
-            let addend = reloc.addend();
+            let mut addend = reloc.addend();
             let target = match reloc.target() {
                 object::read::RelocationTarget::Symbol(index) => {
                     let symbol = elf.symbol_by_index(index).map_err(map_object_err)?;
@@ -210,6 +269,19 @@ where
                         symbol_name_to_relocation_target(symbol_name)?
                     {
                         reloc_target
+                    } else if let object::SymbolSection::Section(section_index) = symbol.section() {
+                        // TODO: Encode symbol address into addend, I think this is a bit hacky.
+                        addend = addend.wrapping_add(symbol.address() as i64);
+
+                        if section_index == root_section_index {
+                            root_section_reloc_target
+                        } else {
+                            if visited.insert(section_index) {
+                                worklist.push(section_index);
+                            }
+
+                            elf_section_to_target(section_index)
+                        }
                     } else {
                         return Err(CompileError::Codegen(format!(
                             "relocation targets unknown symbol {:?}",

@@ -17,8 +17,6 @@
 use anyhow::bail;
 use std::fmt;
 use wasmer::{imports, wat2wasm, Function, Instance, Module, Store, TypedFunction};
-use wasmer_compiler::Universal;
-use wasmer_compiler_cranelift::Cranelift;
 
 // First we need to create an error type that we'll use to signal the end of execution.
 #[derive(Debug, Clone, Copy)]
@@ -52,10 +50,7 @@ fn main() -> anyhow::Result<()> {
     )?;
 
     // Create a Store.
-    // Note that we don't need to specify the engine/compiler if we want to use
-    // the default provided by Wasmer.
-    // You can use `Store::default()` for that.
-    let store = Store::new_with_engine(&Universal::new(Cranelift::default()).engine());
+    let mut store = Store::default();
 
     println!("Compiling module...");
     // Let's compile the Wasm module.
@@ -70,22 +65,23 @@ fn main() -> anyhow::Result<()> {
     // Create an import object.
     let import_object = imports! {
         "env" => {
-            "early_exit" => Function::new_native(&store, early_exit),
+            "early_exit" => Function::new_typed(&mut store, early_exit),
         }
     };
 
     println!("Instantiating module...");
     // Let's instantiate the Wasm module.
-    let instance = Instance::new(&module, &import_object)?;
+    let instance = Instance::new(&mut store, &module, &import_object)?;
 
     // Here we go.
     //
     // Get the `run` function which we'll use as our entrypoint.
     println!("Calling `run` function...");
-    let run_func: TypedFunction<(i32, i32), i32> = instance.exports.get_native_function("run")?;
+    let run_func: TypedFunction<(i32, i32), i32> =
+        instance.exports.get_typed_function(&mut store, "run")?;
 
     // When we call a function it can either succeed or fail. We expect it to fail.
-    match run_func.call(1, 7) {
+    match run_func.call(&mut store, 1, 7) {
         Ok(result) => {
             bail!(
                 "Expected early termination with `ExitCode`, found: {}",

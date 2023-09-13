@@ -3,10 +3,18 @@
 use anyhow::{Chain, Error};
 use colored::*;
 use std::fmt::{self, Debug, Write};
+use wasmer::RuntimeError;
 
 /// A `PrettyError` for printing `anyhow::Error` nicely.
 pub struct PrettyError {
     error: Error,
+}
+
+impl PrettyError {
+    /// Create a new [`PrettyError`].
+    pub fn new(error: Error) -> Self {
+        PrettyError { error }
+    }
 }
 
 /// A macro that prints a warning with nice colors
@@ -18,6 +26,33 @@ macro_rules! warning {
     })
 }
 
+#[cfg(not(feature = "jsc"))]
+impl PrettyError {
+    /// Process a `Result` printing any errors and exiting
+    /// the process after
+    pub fn report<T>(result: Result<T, Error>) -> ! {
+        std::process::exit(match result {
+            Ok(_t) => 0,
+            Err(error) => {
+                let runtime: Option<&RuntimeError> = error.downcast_ref();
+                let trapcode = runtime.map(|e| e.clone().to_trap());
+                eprintln!("{:?}", PrettyError { error });
+                // we don't use process:abort() here to avoid message from rust
+                // that could interfer with testing tools
+                // but still exit with the expected error code
+                match trapcode {
+                    #[cfg(target_os = "windows")]
+                    Some(_) => 3,
+                    #[cfg(not(target_os = "windows"))]
+                    Some(_) => 128 + libc::SIGABRT,
+                    _ => 1,
+                }
+            }
+        });
+    }
+}
+
+#[cfg(feature = "jsc")]
 impl PrettyError {
     /// Process a `Result` printing any errors and exiting
     /// the process after
@@ -26,6 +61,9 @@ impl PrettyError {
             Ok(_t) => 0,
             Err(error) => {
                 eprintln!("{:?}", PrettyError { error });
+                // we don't use process:abort() here to avoid message from rust
+                // that could interfer with testing tools
+                // but still exit with the expected error code
                 1
             }
         });

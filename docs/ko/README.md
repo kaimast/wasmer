@@ -33,7 +33,7 @@ Wasmer는 _초경량 컨테이너_ 를 *Desktop*에서부터 *Cloud*, *Edge*, *I
 
 ### 특징
 
-* 기본적으로 안전합니다. 파일, 네트워크, 환경 접근이 명시적으로 활성화 되지 않습니다.
+* 기본적으로 안전합니다. 명시적으로 설정하지 않는 한 파일, 네트워크 또는 환경에 액세스할 수 없습니다.
 * [WASI](https://github.com/WebAssembly/WASI)와 [Emscripten](https://emscripten.org/)을 즉시 지원합니다.
 * 빠릅니다. native에 가까운 속도로 WebAssembly를 실행합니다.
 * [여러 프로그래밍 언어](https://github.com/wasmerio/wasmer/#-language-integrations)에 임베디드 가능합니다.
@@ -131,6 +131,7 @@ Wasmer 런타임은 **다른 언어에 내장된** 라이브러리로 사용할 
 | ![Zig logo] | [**Zig**][Zig integration] | *공개 패키지 없음* | |
 | ![Dart logo] | [**Dart**][Dart integration] | [`wasm` pub package] | |
 |  | [**Lisp**][Lisp integration] | *under heavy development - no published package* | |
+| ![Ocaml logo] | [**OCaml**][OCaml integration] | [`wasmer` OCaml package] | |
 
 [👋&nbsp;&nbsp;없는 언어가 있습니까?](https://github.com/wasmerio/wasmer/issues/new?assignees=&labels=%F0%9F%8E%89+enhancement&template=---feature-request.md&title=)
 
@@ -207,6 +208,10 @@ Wasmer 런타임은 **다른 언어에 내장된** 라이브러리로 사용할 
 [`wasm` pub package]: https://pub.dev/packages/wasm
 
 [lisp integration]: https://github.com/helmutkian/cl-wasm-runtime
+
+[OCaml logo]: https://raw.githubusercontent.com/wasmerio/wasmer/master/assets/languages/ocaml.svg
+[OCaml integration]: https://github.com/wasmerio/wasmer-ocaml
+[`wasmer` OCaml package]: https://opam.ocaml.org/packages/wasmer/
 
 ## 기여
 

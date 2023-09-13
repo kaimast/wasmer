@@ -83,7 +83,7 @@ qjs >
 
 ## 他の言語とのインテグレーション
 
-📦 Wasmer ランタイムは**他の言語に組み込んで**使用できるため、WebAssembly は_どんな場所でも_利用できます。
+📦 Wasmer ランタイムは**他の言語に組み込んで**使用できるため、WebAssembly は*どんな場所でも*利用できます。
 
 | &nbsp; | Language | Package | Docs |
 |-|-|-|-|
@@ -102,6 +102,7 @@ qjs >
 | ![Postgres logo] | [**Postgres**][Postgres integration] | *公開パッケージなし* | [Docs][postgres docs] |
 |  | [**Swift**][Swift integration] | *公開パッケージなし* | |
 | ![Zig logo] | [**Zig**][Zig integration] | *no published package* | |
+| ![Ocaml logo] | [**OCaml**][OCaml integration] | [`wasmer` OCaml package] | |
 
 [👋 言語が見当たらない？](https://github.com/wasmerio/wasmer/issues/new?assignees=&labels=%F0%9F%8E%89+enhancement&template=---feature-request.md&title=)
 
@@ -172,6 +173,10 @@ qjs >
 
 [zig logo]: https://raw.githubusercontent.com/ziglang/logo/master/zig-favicon.png
 [zig integration]: https://github.com/zigwasm/wasmer-zig
+
+[OCaml logo]: https://raw.githubusercontent.com/wasmerio/wasmer/master/assets/languages/ocaml.svg
+[OCaml integration]: https://github.com/wasmerio/wasmer-ocaml
+[`wasmer` OCaml package]: https://opam.ocaml.org/packages/wasmer/
 
 ## コントリビューション
 

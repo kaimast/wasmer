@@ -10,11 +10,12 @@ use crate::unwind::{UnwindInstructions, UnwindOps};
 use dynasmrt::{aarch64::Aarch64Relocation, VecAssembler};
 #[cfg(feature = "unwind")]
 use gimli::{write::CallFrameInstruction, AArch64};
-use wasmer_compiler::wasmparser::Type as WpType;
-use wasmer_compiler::CallingConvention;
-use wasmer_types::{CustomSection, Relocation, RelocationKind, RelocationTarget};
-use wasmer_types::{FunctionBody, InstructionAddressMap, SourceLoc, TrapInformation};
-use wasmer_types::{FunctionIndex, FunctionType, TrapCode, VMOffsets};
+use wasmer_compiler::wasmparser::ValType as WpType;
+use wasmer_types::{
+    CallingConvention, CompileError, CustomSection, FunctionBody, FunctionIndex, FunctionType,
+    InstructionAddressMap, Relocation, RelocationKind, RelocationTarget, SourceLoc, TrapCode,
+    TrapInformation, VMOffsets,
+};
 
 type Assembler = VecAssembler<Aarch64Relocation>;
 type Location = AbstractLocation<GPR, NEON>;
@@ -175,7 +176,7 @@ impl MachineARM64 {
         allow_imm: ImmType,
         read_val: bool,
         wanted: Option<GPR>,
-    ) -> Result<Location, CodegenError> {
+    ) -> Result<Location, CompileError> {
         match src {
             Location::GPR(_) | Location::SIMD(_) => Ok(src),
             Location::Imm8(val) => {
@@ -187,8 +188,8 @@ impl MachineARM64 {
                     let tmp = if let Some(wanted) = wanted {
                         wanted
                     } else {
-                        let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                            message: "singlepass cannot acquire temp gpr".to_string(),
+                        let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                         })?;
                         temps.push(tmp);
                         tmp
@@ -207,8 +208,8 @@ impl MachineARM64 {
                     let tmp = if let Some(wanted) = wanted {
                         wanted
                     } else {
-                        let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                            message: "singlepass cannot acquire temp gpr".to_string(),
+                        let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                         })?;
                         temps.push(tmp);
                         tmp
@@ -227,8 +228,8 @@ impl MachineARM64 {
                     let tmp = if let Some(wanted) = wanted {
                         wanted
                     } else {
-                        let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                            message: "singlepass cannot acquire temp gpr".to_string(),
+                        let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                         })?;
                         temps.push(tmp);
                         tmp
@@ -242,8 +243,8 @@ impl MachineARM64 {
                 let tmp = if let Some(wanted) = wanted {
                     wanted
                 } else {
-                    let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
                     temps.push(tmp);
                     tmp
@@ -326,12 +327,12 @@ impl MachineARM64 {
         temps: &mut Vec<NEON>,
         allow_imm: ImmType,
         read_val: bool,
-    ) -> Result<Location, CodegenError> {
+    ) -> Result<Location, CompileError> {
         match src {
             Location::SIMD(_) => Ok(src),
             Location::GPR(_) => {
-                let tmp = self.acquire_temp_simd().ok_or(CodegenError {
-                    message: "singlepass cannot acquire temp simd".to_string(),
+                let tmp = self.acquire_temp_simd().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp simd".to_owned())
                 })?;
                 temps.push(tmp);
                 if read_val {
@@ -343,11 +344,11 @@ impl MachineARM64 {
                 if self.compatible_imm(val as i64, allow_imm) {
                     Ok(src)
                 } else {
-                    let gpr = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let gpr = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
-                    let tmp = self.acquire_temp_simd().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp simd".to_string(),
+                    let tmp = self.acquire_temp_simd().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp simd".to_owned())
                     })?;
                     temps.push(tmp);
                     self.assembler
@@ -362,11 +363,11 @@ impl MachineARM64 {
                 if self.compatible_imm(val as i64, allow_imm) {
                     Ok(src)
                 } else {
-                    let gpr = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let gpr = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
-                    let tmp = self.acquire_temp_simd().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp simd".to_string(),
+                    let tmp = self.acquire_temp_simd().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp simd".to_owned())
                     })?;
                     temps.push(tmp);
                     self.assembler
@@ -381,11 +382,11 @@ impl MachineARM64 {
                 if self.compatible_imm(val as i64, allow_imm) {
                     Ok(src)
                 } else {
-                    let gpr = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let gpr = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
-                    let tmp = self.acquire_temp_simd().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp simd".to_string(),
+                    let tmp = self.acquire_temp_simd().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp simd".to_owned())
                     })?;
                     temps.push(tmp);
                     self.assembler
@@ -397,8 +398,8 @@ impl MachineARM64 {
                 }
             }
             Location::Memory(reg, val) => {
-                let tmp = self.acquire_temp_simd().ok_or(CodegenError {
-                    message: "singlepass cannot acquire temp simd".to_string(),
+                let tmp = self.acquire_temp_simd().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp simd".to_owned())
                 })?;
                 temps.push(tmp);
                 if read_val {
@@ -417,8 +418,8 @@ impl MachineARM64 {
                         self.assembler
                             .emit_ldur(sz, Location::SIMD(tmp), reg, val)?;
                     } else {
-                        let gpr = self.acquire_temp_gpr().ok_or(CodegenError {
-                            message: "singlepass cannot acquire temp gpr".to_string(),
+                        let gpr = self.acquire_temp_gpr().ok_or_else(|| {
+                            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                         })?;
                         self.assembler
                             .emit_mov_imm(Location::GPR(gpr), (val as i64) as u64)?;
@@ -438,12 +439,12 @@ impl MachineARM64 {
 
     fn emit_relaxed_binop(
         &mut self,
-        op: fn(&mut Assembler, Size, Location, Location) -> Result<(), CodegenError>,
+        op: fn(&mut Assembler, Size, Location, Location) -> Result<(), CompileError>,
         sz: Size,
         src: Location,
         dst: Location,
         putback: bool,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let src_imm = if putback {
             ImmType::None
@@ -463,12 +464,12 @@ impl MachineARM64 {
     }
     fn emit_relaxed_binop_neon(
         &mut self,
-        op: fn(&mut Assembler, Size, Location, Location) -> Result<(), CodegenError>,
+        op: fn(&mut Assembler, Size, Location, Location) -> Result<(), CompileError>,
         sz: Size,
         src: Location,
         dst: Location,
         putback: bool,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let src = self.location_to_neon(sz, src, &mut temps, ImmType::None, true)?;
         let dest = self.location_to_neon(sz, dst, &mut temps, ImmType::None, !putback)?;
@@ -483,13 +484,13 @@ impl MachineARM64 {
     }
     fn emit_relaxed_binop3(
         &mut self,
-        op: fn(&mut Assembler, Size, Location, Location, Location) -> Result<(), CodegenError>,
+        op: fn(&mut Assembler, Size, Location, Location, Location) -> Result<(), CompileError>,
         sz: Size,
         src1: Location,
         src2: Location,
         dst: Location,
         allow_imm: ImmType,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let src1 = self.location_to_reg(sz, src1, &mut temps, ImmType::None, true, None)?;
         let src2 = self.location_to_reg(sz, src2, &mut temps, allow_imm, true, None)?;
@@ -505,13 +506,13 @@ impl MachineARM64 {
     }
     fn emit_relaxed_binop3_neon(
         &mut self,
-        op: fn(&mut Assembler, Size, Location, Location, Location) -> Result<(), CodegenError>,
+        op: fn(&mut Assembler, Size, Location, Location, Location) -> Result<(), CompileError>,
         sz: Size,
         src1: Location,
         src2: Location,
         dst: Location,
         allow_imm: ImmType,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let src1 = self.location_to_neon(sz, src1, &mut temps, ImmType::None, true)?;
         let src2 = self.location_to_neon(sz, src2, &mut temps, allow_imm, true)?;
@@ -530,7 +531,7 @@ impl MachineARM64 {
         sz: Size,
         dst: Location,
         src: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(sz, dst, &mut temps, ImmType::None, false, None)?;
         match src {
@@ -540,8 +541,8 @@ impl MachineARM64 {
                 } else if self.compatible_imm(offset as i64, ImmType::UnscaledOffset) {
                     self.assembler.emit_ldur(Size::S64, dest, addr, offset)?;
                 } else {
-                    let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
                     self.assembler
                         .emit_mov_imm(Location::GPR(tmp), (offset as i64) as u64)?;
@@ -568,7 +569,7 @@ impl MachineARM64 {
         sz: Size,
         dst: Location,
         src: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(sz, dst, &mut temps, ImmType::None, false, None)?;
         match src {
@@ -578,8 +579,8 @@ impl MachineARM64 {
                 } else if self.compatible_imm(offset as i64, ImmType::UnscaledOffset) {
                     self.assembler.emit_ldur(Size::S32, dest, addr, offset)?;
                 } else {
-                    let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
                     self.assembler
                         .emit_mov_imm(Location::GPR(tmp), (offset as i64) as u64)?;
@@ -606,7 +607,7 @@ impl MachineARM64 {
         sz: Size,
         dst: Location,
         src: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(sz, dst, &mut temps, ImmType::None, false, None)?;
         match src {
@@ -614,8 +615,8 @@ impl MachineARM64 {
                 if self.compatible_imm(offset as i64, ImmType::OffsetWord) {
                     self.assembler.emit_ldrsw(Size::S64, dest, src)?;
                 } else {
-                    let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
                     self.assembler
                         .emit_mov_imm(Location::GPR(tmp), (offset as i64) as u64)?;
@@ -642,7 +643,7 @@ impl MachineARM64 {
         sz: Size,
         dst: Location,
         src: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(sz, dst, &mut temps, ImmType::None, false, None)?;
         match src {
@@ -650,8 +651,8 @@ impl MachineARM64 {
                 if self.compatible_imm(offset as i64, ImmType::OffsetHWord) {
                     self.assembler.emit_ldrh(Size::S32, dest, src)?;
                 } else {
-                    let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
                     self.assembler
                         .emit_mov_imm(Location::GPR(tmp), (offset as i64) as u64)?;
@@ -678,7 +679,7 @@ impl MachineARM64 {
         sz: Size,
         dst: Location,
         src: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(sz, dst, &mut temps, ImmType::None, false, None)?;
         match src {
@@ -686,8 +687,8 @@ impl MachineARM64 {
                 if self.compatible_imm(offset as i64, ImmType::OffsetHWord) {
                     self.assembler.emit_ldrsh(sz, dest, src)?;
                 } else {
-                    let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
                     self.assembler
                         .emit_mov_imm(Location::GPR(tmp), (offset as i64) as u64)?;
@@ -714,7 +715,7 @@ impl MachineARM64 {
         sz: Size,
         dst: Location,
         src: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(sz, dst, &mut temps, ImmType::None, false, None)?;
         match src {
@@ -722,8 +723,8 @@ impl MachineARM64 {
                 if self.compatible_imm(offset as i64, ImmType::OffsetByte) {
                     self.assembler.emit_ldrb(Size::S32, dest, src)?;
                 } else {
-                    let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
                     self.assembler
                         .emit_mov_imm(Location::GPR(tmp), (offset as i64) as u64)?;
@@ -750,7 +751,7 @@ impl MachineARM64 {
         sz: Size,
         dst: Location,
         src: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(sz, dst, &mut temps, ImmType::None, false, None)?;
         match src {
@@ -758,8 +759,8 @@ impl MachineARM64 {
                 if self.compatible_imm(offset as i64, ImmType::OffsetByte) {
                     self.assembler.emit_ldrsb(sz, dest, src)?;
                 } else {
-                    let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
                     self.assembler
                         .emit_mov_imm(Location::GPR(tmp), (offset as i64) as u64)?;
@@ -781,7 +782,7 @@ impl MachineARM64 {
         }
         Ok(())
     }
-    fn emit_relaxed_str64(&mut self, dst: Location, src: Location) -> Result<(), CodegenError> {
+    fn emit_relaxed_str64(&mut self, dst: Location, src: Location) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dst = self.location_to_reg(Size::S64, dst, &mut temps, ImmType::NoneXzr, true, None)?;
         match src {
@@ -791,8 +792,8 @@ impl MachineARM64 {
                 } else if self.compatible_imm(offset as i64, ImmType::UnscaledOffset) {
                     self.assembler.emit_stur(Size::S64, dst, addr, offset)?;
                 } else {
-                    let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
                     self.assembler
                         .emit_mov_imm(Location::GPR(tmp), (offset as i64) as u64)?;
@@ -811,7 +812,7 @@ impl MachineARM64 {
         }
         Ok(())
     }
-    fn emit_relaxed_str32(&mut self, dst: Location, src: Location) -> Result<(), CodegenError> {
+    fn emit_relaxed_str32(&mut self, dst: Location, src: Location) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dst = self.location_to_reg(Size::S64, dst, &mut temps, ImmType::NoneXzr, true, None)?;
         match src {
@@ -821,8 +822,8 @@ impl MachineARM64 {
                 } else if self.compatible_imm(offset as i64, ImmType::UnscaledOffset) {
                     self.assembler.emit_stur(Size::S32, dst, addr, offset)?;
                 } else {
-                    let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
                     self.assembler
                         .emit_mov_imm(Location::GPR(tmp), (offset as i64) as u64)?;
@@ -841,7 +842,7 @@ impl MachineARM64 {
         }
         Ok(())
     }
-    fn emit_relaxed_str16(&mut self, dst: Location, src: Location) -> Result<(), CodegenError> {
+    fn emit_relaxed_str16(&mut self, dst: Location, src: Location) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dst = self.location_to_reg(Size::S64, dst, &mut temps, ImmType::NoneXzr, true, None)?;
         match src {
@@ -849,8 +850,8 @@ impl MachineARM64 {
                 if self.compatible_imm(offset as i64, ImmType::OffsetHWord) {
                     self.assembler.emit_strh(Size::S32, dst, src)?;
                 } else {
-                    let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
                     self.assembler
                         .emit_mov_imm(Location::GPR(tmp), (offset as i64) as u64)?;
@@ -869,7 +870,7 @@ impl MachineARM64 {
         }
         Ok(())
     }
-    fn emit_relaxed_str8(&mut self, dst: Location, src: Location) -> Result<(), CodegenError> {
+    fn emit_relaxed_str8(&mut self, dst: Location, src: Location) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dst = self.location_to_reg(Size::S64, dst, &mut temps, ImmType::NoneXzr, true, None)?;
         match src {
@@ -878,8 +879,8 @@ impl MachineARM64 {
                     self.assembler
                         .emit_strb(Size::S32, dst, Location::Memory(addr, offset))?;
                 } else {
-                    let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                        message: "singlepass cannot acquire temp gpr".to_string(),
+                    let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                        CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                     })?;
                     self.assembler
                         .emit_mov_imm(Location::GPR(tmp), (offset as i64) as u64)?;
@@ -905,15 +906,15 @@ impl MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         match ret {
             Location::GPR(_) => {
                 self.emit_relaxed_cmp(Size::S64, loc_b, loc_a)?;
                 self.assembler.emit_cset(Size::S32, ret, c)?;
             }
             Location::Memory(_, _) => {
-                let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                    message: "singlepass cannot acquire temp gpr".to_string(),
+                let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                 })?;
                 self.emit_relaxed_cmp(Size::S64, loc_b, loc_a)?;
                 self.assembler.emit_cset(Size::S32, Location::GPR(tmp), c)?;
@@ -933,15 +934,15 @@ impl MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         match ret {
             Location::GPR(_) => {
                 self.emit_relaxed_cmp(Size::S32, loc_b, loc_a)?;
                 self.assembler.emit_cset(Size::S32, ret, c)?;
             }
             Location::Memory(_, _) => {
-                let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                    message: "singlepass cannot acquire temp gpr".to_string(),
+                let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                 })?;
                 self.emit_relaxed_cmp(Size::S32, loc_b, loc_a)?;
                 self.assembler.emit_cset(Size::S32, Location::GPR(tmp), c)?;
@@ -956,20 +957,21 @@ impl MachineARM64 {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn memory_op<F: FnOnce(&mut Self, GPR) -> Result<(), CodegenError>>(
+    fn memory_op<F: FnOnce(&mut Self, GPR) -> Result<(), CompileError>>(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         check_alignment: bool,
         value_size: usize,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
+        unaligned_atomic: Label,
         cb: F,
-    ) -> Result<(), CodegenError> {
-        let tmp_addr = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+    ) -> Result<(), CompileError> {
+        let tmp_addr = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
 
         // Reusing `tmp_addr` for temporary indirection here, since it's not used before the last reference to `{base,bound}_loc`.
@@ -990,11 +992,11 @@ impl MachineARM64 {
             )
         };
 
-        let tmp_base = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+        let tmp_base = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
-        let tmp_bound = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+        let tmp_bound = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
 
         // Load base into temporary register.
@@ -1021,8 +1023,8 @@ impl MachineARM64 {
                     Location::GPR(tmp_bound),
                 )?;
             } else {
-                let tmp2 = self.acquire_temp_gpr().ok_or(CodegenError {
-                    message: "singlepass cannot acquire temp gpr".to_string(),
+                let tmp2 = self.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                 })?;
                 self.assembler
                     .emit_mov_imm(Location::GPR(tmp2), value_size as u64)?;
@@ -1051,8 +1053,8 @@ impl MachineARM64 {
                     Location::GPR(tmp_addr),
                 )?;
             } else {
-                let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                    message: "singlepass cannot acquire temp gpr".to_string(),
+                let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                 })?;
                 self.assembler
                     .emit_mov_imm(Location::GPR(tmp), memarg.offset as _)?;
@@ -1094,15 +1096,15 @@ impl MachineARM64 {
         self.release_gpr(tmp_bound);
         self.release_gpr(tmp_base);
 
-        let align = memarg.align;
+        let align = value_size as u32;
         if check_alignment && align != 1 {
             self.assembler.emit_tst(
                 Size::S64,
-                Location::Imm32((align - 1).into()),
+                Location::Imm32(align - 1),
                 Location::GPR(tmp_addr),
             )?;
             self.assembler
-                .emit_bcond_label_far(Condition::Ne, heap_access_oob)?;
+                .emit_bcond_label_far(Condition::Ne, unaligned_atomic)?;
         }
         let begin = self.assembler.get_offset().0;
         cb(self, tmp_addr)?;
@@ -1118,7 +1120,7 @@ impl MachineARM64 {
         _loc: Location,
         _target: Location,
         _ret: Location,
-        _memarg: &MemoryImmediate,
+        _memarg: &MemArg,
         _value_size: usize,
         _memory_sz: Size,
         _stack_sz: Size,
@@ -1126,6 +1128,7 @@ impl MachineARM64 {
         _imported_memories: bool,
         _offset: i32,
         _heap_access_oob: Label,
+        _unaligned_atomic: Label,
         _cb: F,
     ) {
         unimplemented!();
@@ -1150,7 +1153,7 @@ impl MachineARM64 {
         true
     }
 
-    fn emit_push(&mut self, sz: Size, src: Location) -> Result<(), CodegenError> {
+    fn emit_push(&mut self, sz: Size, src: Location) -> Result<(), CompileError> {
         match (sz, src) {
             (Size::S64, Location::GPR(_)) | (Size::S64, Location::SIMD(_)) => {
                 let offset = if self.pushed {
@@ -1198,7 +1201,7 @@ impl MachineARM64 {
         sz: Size,
         src1: Location,
         src2: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         if !self.pushed {
             match (sz, src1, src2) {
                 (Size::S64, Location::GPR(_), Location::GPR(_)) => {
@@ -1216,7 +1219,7 @@ impl MachineARM64 {
         }
         Ok(())
     }
-    fn emit_pop(&mut self, sz: Size, dst: Location) -> Result<(), CodegenError> {
+    fn emit_pop(&mut self, sz: Size, dst: Location) -> Result<(), CompileError> {
         match (sz, dst) {
             (Size::S64, Location::GPR(_)) | (Size::S64, Location::SIMD(_)) => {
                 let offset = if self.pushed { 8 } else { 0 };
@@ -1241,7 +1244,7 @@ impl MachineARM64 {
         sz: Size,
         dst1: Location,
         dst2: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         if !self.pushed {
             match (sz, dst1, dst2) {
                 (Size::S64, Location::GPR(_), Location::GPR(_)) => {
@@ -1260,19 +1263,19 @@ impl MachineARM64 {
         Ok(())
     }
 
-    fn set_default_nan(&mut self, temps: &mut Vec<GPR>) -> Result<GPR, CodegenError> {
+    fn set_default_nan(&mut self, temps: &mut Vec<GPR>) -> Result<GPR, CompileError> {
         // temporarly set FPCR to DefaultNan
-        let old_fpcr = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+        let old_fpcr = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
         temps.push(old_fpcr);
         self.assembler.emit_read_fpcr(old_fpcr)?;
-        let new_fpcr = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+        let new_fpcr = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
         temps.push(new_fpcr);
-        let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+        let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
         temps.push(tmp);
         self.assembler
@@ -1290,15 +1293,15 @@ impl MachineARM64 {
         self.assembler.emit_write_fpcr(new_fpcr)?;
         Ok(old_fpcr)
     }
-    fn set_trap_enabled(&mut self, temps: &mut Vec<GPR>) -> Result<GPR, CodegenError> {
+    fn set_trap_enabled(&mut self, temps: &mut Vec<GPR>) -> Result<GPR, CompileError> {
         // temporarly set FPCR to DefaultNan
-        let old_fpcr = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+        let old_fpcr = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
         temps.push(old_fpcr);
         self.assembler.emit_read_fpcr(old_fpcr)?;
-        let new_fpcr = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+        let new_fpcr = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
         temps.push(new_fpcr);
         self.assembler
@@ -1309,14 +1312,14 @@ impl MachineARM64 {
         self.assembler.emit_write_fpcr(new_fpcr)?;
         Ok(old_fpcr)
     }
-    fn restore_fpcr(&mut self, old_fpcr: GPR) -> Result<(), CodegenError> {
+    fn restore_fpcr(&mut self, old_fpcr: GPR) -> Result<(), CompileError> {
         self.assembler.emit_write_fpcr(old_fpcr)
     }
 
-    fn reset_exception_fpsr(&mut self) -> Result<(), CodegenError> {
+    fn reset_exception_fpsr(&mut self) -> Result<(), CompileError> {
         // reset exception count in FPSR
-        let fpsr = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+        let fpsr = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
         self.assembler.emit_read_fpsr(fpsr)?;
         // IOC is 0
@@ -1326,9 +1329,9 @@ impl MachineARM64 {
         self.release_gpr(fpsr);
         Ok(())
     }
-    fn read_fpsr(&mut self) -> Result<GPR, CodegenError> {
-        let fpsr = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+    fn read_fpsr(&mut self) -> Result<GPR, CompileError> {
+        let fpsr = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
         self.assembler.emit_read_fpsr(fpsr)?;
         Ok(fpsr)
@@ -1340,7 +1343,7 @@ impl MachineARM64 {
         sz: Size,
         f: Location,
         temps: &mut Vec<GPR>,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let trap_badconv = self.assembler.get_label();
         let end = self.assembler.get_label();
 
@@ -1391,7 +1394,7 @@ impl MachineARM64 {
     fn emit_unwind_op(&mut self, op: UnwindOps) {
         self.unwind_ops.push((self.get_offset().0, op));
     }
-    fn emit_illegal_op_internal(&mut self, trap: TrapCode) -> Result<(), CodegenError> {
+    fn emit_illegal_op_internal(&mut self, trap: TrapCode) -> Result<(), CompileError> {
         self.assembler.emit_udf(0xc0 | (trap as u8) as u16)
     }
 }
@@ -1472,7 +1475,7 @@ impl Machine for MachineARM64 {
         self.used_gprs_insert(gpr);
     }
 
-    fn push_used_gpr(&mut self, used_gprs: &[GPR]) -> Result<usize, CodegenError> {
+    fn push_used_gpr(&mut self, used_gprs: &[GPR]) -> Result<usize, CompileError> {
         if used_gprs.len() % 2 == 1 {
             self.emit_push(Size::S64, Location::GPR(GPR::XzrSp))?;
         }
@@ -1481,7 +1484,7 @@ impl Machine for MachineARM64 {
         }
         Ok(((used_gprs.len() + 1) / 2) * 16)
     }
-    fn pop_used_gpr(&mut self, used_gprs: &[GPR]) -> Result<(), CodegenError> {
+    fn pop_used_gpr(&mut self, used_gprs: &[GPR]) -> Result<(), CompileError> {
         for r in used_gprs.iter().rev() {
             self.emit_pop(Size::S64, Location::GPR(*r))?;
         }
@@ -1533,7 +1536,7 @@ impl Machine for MachineARM64 {
         assert!(self.used_simd_remove(&simd));
     }
 
-    fn push_used_simd(&mut self, used_neons: &[NEON]) -> Result<usize, CodegenError> {
+    fn push_used_simd(&mut self, used_neons: &[NEON]) -> Result<usize, CompileError> {
         let stack_adjust = if used_neons.len() & 1 == 1 {
             (used_neons.len() * 8) as u32 + 8
         } else {
@@ -1550,7 +1553,7 @@ impl Machine for MachineARM64 {
         }
         Ok(stack_adjust as usize)
     }
-    fn pop_used_simd(&mut self, used_neons: &[NEON]) -> Result<(), CodegenError> {
+    fn pop_used_simd(&mut self, used_neons: &[NEON]) -> Result<(), CompileError> {
         for (i, r) in used_neons.iter().enumerate() {
             self.assembler.emit_ldr(
                 Size::S64,
@@ -1646,7 +1649,7 @@ impl Machine for MachineARM64 {
     }
 
     // Adjust stack for locals
-    fn adjust_stack(&mut self, delta_stack_offset: u32) -> Result<(), CodegenError> {
+    fn adjust_stack(&mut self, delta_stack_offset: u32) -> Result<(), CompileError> {
         let delta = if self.compatible_imm(delta_stack_offset as _, ImmType::Bits12) {
             Location::Imm32(delta_stack_offset as _)
         } else {
@@ -1663,7 +1666,7 @@ impl Machine for MachineARM64 {
         )
     }
     // restore stack
-    fn restore_stack(&mut self, delta_stack_offset: u32) -> Result<(), CodegenError> {
+    fn restore_stack(&mut self, delta_stack_offset: u32) -> Result<(), CompileError> {
         let delta = if self.compatible_imm(delta_stack_offset as _, ImmType::Bits12) {
             Location::Imm32(delta_stack_offset as _)
         } else {
@@ -1679,7 +1682,7 @@ impl Machine for MachineARM64 {
             Location::GPR(GPR::XzrSp),
         )
     }
-    fn pop_stack_locals(&mut self, delta_stack_offset: u32) -> Result<(), CodegenError> {
+    fn pop_stack_locals(&mut self, delta_stack_offset: u32) -> Result<(), CompileError> {
         let real_delta = if delta_stack_offset & 15 != 0 {
             delta_stack_offset + 8
         } else {
@@ -1706,7 +1709,7 @@ impl Machine for MachineARM64 {
         size: Size,
         loc: Location,
         dest: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         match loc {
             Location::Imm64(_)
             | Location::Imm32(_)
@@ -1721,7 +1724,7 @@ impl Machine for MachineARM64 {
     }
 
     // Zero a location that is 32bits
-    fn zero_location(&mut self, size: Size, location: Location) -> Result<(), CodegenError> {
+    fn zero_location(&mut self, size: Size, location: Location) -> Result<(), CompileError> {
         self.move_location(size, Location::GPR(GPR::XzrSp), location)
     }
 
@@ -1751,22 +1754,32 @@ impl Machine for MachineARM64 {
         }
     }
     // Move a local to the stack
-    fn move_local(&mut self, stack_offset: i32, location: Location) -> Result<(), CodegenError> {
+    fn move_local(&mut self, stack_offset: i32, location: Location) -> Result<(), CompileError> {
         if stack_offset < 256 {
             self.assembler
                 .emit_stur(Size::S64, location, GPR::X29, -stack_offset)?;
         } else {
             let tmp = GPR::X17;
-            self.assembler
-                .emit_mov_imm(Location::GPR(tmp), (stack_offset as i64) as u64)?;
-            self.assembler.emit_sub(
-                Size::S64,
-                Location::GPR(GPR::X29),
-                Location::GPR(tmp),
-                Location::GPR(tmp),
-            )?;
-            self.assembler
-                .emit_str(Size::S64, location, Location::GPR(tmp))?;
+            if stack_offset < 0x1_0000 {
+                self.assembler
+                    .emit_mov_imm(Location::GPR(tmp), (-stack_offset as i64) as u64)?;
+                self.assembler.emit_str(
+                    Size::S64,
+                    location,
+                    Location::Memory2(GPR::X29, tmp, Multiplier::One, 0),
+                )?;
+            } else {
+                self.assembler
+                    .emit_mov_imm(Location::GPR(tmp), (stack_offset as i64) as u64)?;
+                self.assembler.emit_sub(
+                    Size::S64,
+                    Location::GPR(GPR::X29),
+                    Location::GPR(tmp),
+                    Location::GPR(tmp),
+                )?;
+                self.assembler
+                    .emit_str(Size::S64, location, Location::GPR(tmp))?;
+            }
         }
         match location {
             Location::GPR(x) => self.emit_unwind_op(UnwindOps::SaveRegister {
@@ -1806,18 +1819,19 @@ impl Machine for MachineARM64 {
                 6 => Location::GPR(GPR::X6),
                 7 => Location::GPR(GPR::X7),
                 _ => {
-                    let sz = match sz {
-                        Size::S8 => 0,
-                        Size::S16 => 1,
-                        Size::S32 => 2,
-                        Size::S64 => 3,
-                    };
+                    let sz = 1
+                        << match sz {
+                            Size::S8 => 0,
+                            Size::S16 => 1,
+                            Size::S32 => 2,
+                            Size::S64 => 3,
+                        };
                     // align first
-                    if sz > 1 && *stack_args & !((1 << sz) - 1) != 0 {
-                        *stack_args = (*stack_args + ((1 << sz) - 1)) & !((1 << sz) - 1);
+                    if sz > 1 && *stack_args & (sz - 1) != 0 {
+                        *stack_args = (*stack_args + (sz - 1)) & !(sz - 1);
                     }
                     let loc = Location::Memory(GPR::XzrSp, *stack_args as i32);
-                    *stack_args += 1 << sz;
+                    *stack_args += sz;
                     loc
                 }
             },
@@ -1857,18 +1871,19 @@ impl Machine for MachineARM64 {
                 6 => Location::GPR(GPR::X6),
                 7 => Location::GPR(GPR::X7),
                 _ => {
-                    let sz = match sz {
-                        Size::S8 => 0,
-                        Size::S16 => 1,
-                        Size::S32 => 2,
-                        Size::S64 => 3,
-                    };
+                    let sz = 1
+                        << match sz {
+                            Size::S8 => 0,
+                            Size::S16 => 1,
+                            Size::S32 => 2,
+                            Size::S64 => 3,
+                        };
                     // align first
-                    if sz > 1 && *stack_args & !((1 << sz) - 1) != 0 {
-                        *stack_args = (*stack_args + ((1 << sz) - 1)) & !((1 << sz) - 1);
+                    if sz > 1 && *stack_args & (sz - 1) != 0 {
+                        *stack_args = (*stack_args + (sz - 1)) & !(sz - 1);
                     }
                     let loc = Location::Memory(GPR::X29, 16 * 2 + *stack_args as i32);
-                    *stack_args += 1 << sz;
+                    *stack_args += sz;
                     loc
                 }
             },
@@ -1916,7 +1931,7 @@ impl Machine for MachineARM64 {
         size: Size,
         source: Location,
         dest: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         match source {
             Location::GPR(_) | Location::SIMD(_) => match dest {
                 Location::GPR(_) | Location::SIMD(_) => self.assembler.emit_mov(size, source, dest),
@@ -2060,7 +2075,7 @@ impl Machine for MachineARM64 {
         source: Location,
         size_op: Size,
         dest: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         if size_op != Size::S64 {
             codegen_error!("singlepass move_location_extend unreachable");
         }
@@ -2072,8 +2087,24 @@ impl Machine for MachineARM64 {
                 self.assembler.emit_mov(size_val, source, dst)?;
                 dst
             }
+            (Size::S8, false, Location::GPR(_)) => {
+                self.assembler.emit_uxtb(size_op, source, dst)?;
+                dst
+            }
+            (Size::S16, false, Location::GPR(_)) => {
+                self.assembler.emit_uxth(size_op, source, dst)?;
+                dst
+            }
+            (Size::S8, true, Location::GPR(_)) => {
+                self.assembler.emit_sxtb(size_op, source, dst)?;
+                dst
+            }
+            (Size::S16, true, Location::GPR(_)) => {
+                self.assembler.emit_sxth(size_op, source, dst)?;
+                dst
+            }
             (Size::S32, true, Location::GPR(_)) => {
-                self.assembler.emit_sxtw(size_val, source, dst)?;
+                self.assembler.emit_sxtw(size_op, source, dst)?;
                 dst
             }
             (Size::S32, false, Location::Memory(_, _)) => {
@@ -2082,6 +2113,22 @@ impl Machine for MachineARM64 {
             }
             (Size::S32, true, Location::Memory(_, _)) => {
                 self.emit_relaxed_ldr32s(size_op, dst, source)?;
+                dst
+            }
+            (Size::S16, false, Location::Memory(_, _)) => {
+                self.emit_relaxed_ldr16(size_op, dst, source)?;
+                dst
+            }
+            (Size::S16, true, Location::Memory(_, _)) => {
+                self.emit_relaxed_ldr16s(size_op, dst, source)?;
+                dst
+            }
+            (Size::S8, false, Location::Memory(_, _)) => {
+                self.emit_relaxed_ldr8(size_op, dst, source)?;
+                dst
+            }
+            (Size::S8, true, Location::Memory(_, _)) => {
+                self.emit_relaxed_ldr8s(size_op, dst, source)?;
                 dst
             }
             _ => codegen_error!(
@@ -2109,7 +2156,7 @@ impl Machine for MachineARM64 {
         _size: Size,
         _reg: Location,
         _mem: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         codegen_error!("singlepass load_address unimplemented");
     }
     // Init the stack loc counter
@@ -2117,11 +2164,11 @@ impl Machine for MachineARM64 {
         &mut self,
         init_stack_loc_cnt: u64,
         last_stack_loc: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let label = self.assembler.get_label();
         let mut temps = vec![];
-        let dest = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+        let dest = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
         temps.push(dest);
         let cnt = self.location_to_reg(
@@ -2146,8 +2193,8 @@ impl Machine for MachineARM64 {
                             Location::GPR(dest),
                         )?;
                     } else {
-                        let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                            message: "singlepass cannot acquire temp gpr".to_string(),
+                        let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                         })?;
                         self.assembler
                             .emit_mov_imm(Location::GPR(tmp), (offset as i64) as u64)?;
@@ -2170,8 +2217,8 @@ impl Machine for MachineARM64 {
                             Location::GPR(dest),
                         )?;
                     } else {
-                        let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                            message: "singlepass cannot acquire temp gpr".to_string(),
+                        let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
                         })?;
                         self.assembler
                             .emit_mov_imm(Location::GPR(tmp), (offset as i64) as u64)?;
@@ -2200,7 +2247,7 @@ impl Machine for MachineARM64 {
         Ok(())
     }
     // Restore save_area
-    fn restore_saved_area(&mut self, saved_area_offset: i32) -> Result<(), CodegenError> {
+    fn restore_saved_area(&mut self, saved_area_offset: i32) -> Result<(), CompileError> {
         let real_delta = if saved_area_offset & 15 != 0 {
             self.pushed = true;
             saved_area_offset + 8
@@ -2216,8 +2263,8 @@ impl Machine for MachineARM64 {
                 Location::GPR(GPR::XzrSp),
             )?;
         } else {
-            let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                message: "singlepass cannot acquire temp gpr".to_string(),
+            let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
             })?;
             self.assembler
                 .emit_mov_imm(Location::GPR(tmp), real_delta as u64)?;
@@ -2232,7 +2279,7 @@ impl Machine for MachineARM64 {
         Ok(())
     }
     // Pop a location
-    fn pop_location(&mut self, location: Location) -> Result<(), CodegenError> {
+    fn pop_location(&mut self, location: Location) -> Result<(), CompileError> {
         self.emit_pop(Size::S64, location)
     }
     // Create a new `MachineState` with default values.
@@ -2249,12 +2296,12 @@ impl Machine for MachineARM64 {
         self.assembler.get_offset()
     }
 
-    fn finalize_function(&mut self) -> Result<(), CodegenError> {
+    fn finalize_function(&mut self) -> Result<(), CompileError> {
         self.assembler.finalize_function();
         Ok(())
     }
 
-    fn emit_function_prolog(&mut self) -> Result<(), CodegenError> {
+    fn emit_function_prolog(&mut self) -> Result<(), CompileError> {
         self.emit_double_push(Size::S64, Location::GPR(GPR::X29), Location::GPR(GPR::X30))?; // save LR too
         self.emit_unwind_op(UnwindOps::Push2Regs {
             reg1: GPR::X29.to_dwarf(),
@@ -2278,7 +2325,7 @@ impl Machine for MachineARM64 {
         Ok(())
     }
 
-    fn emit_function_epilog(&mut self) -> Result<(), CodegenError> {
+    fn emit_function_epilog(&mut self) -> Result<(), CompileError> {
         // cannot use mov, because XSP is XZR there. Need to use ADD with #0
         self.assembler.emit_add(
             Size::S64,
@@ -2297,7 +2344,7 @@ impl Machine for MachineARM64 {
         ty: WpType,
         canonicalize: bool,
         loc: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         if canonicalize {
             self.canonicalize_nan(
                 match ty {
@@ -2314,7 +2361,7 @@ impl Machine for MachineARM64 {
         Ok(())
     }
 
-    fn emit_function_return_float(&mut self) -> Result<(), CodegenError> {
+    fn emit_function_return_float(&mut self) -> Result<(), CompileError> {
         self.assembler
             .emit_mov(Size::S64, Location::GPR(GPR::X0), Location::SIMD(NEON::V0))
     }
@@ -2327,7 +2374,7 @@ impl Machine for MachineARM64 {
         sz: Size,
         input: Location,
         output: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut tempn = vec![];
         let mut temps = vec![];
         let old_fpcr = self.set_default_nan(&mut temps)?;
@@ -2370,7 +2417,7 @@ impl Machine for MachineARM64 {
         Ok(())
     }
 
-    fn emit_illegal_op(&mut self, trap: TrapCode) -> Result<(), CodegenError> {
+    fn emit_illegal_op(&mut self, trap: TrapCode) -> Result<(), CompileError> {
         let offset = self.assembler.get_offset().0;
         self.assembler.emit_udf(0xc0 | (trap as u8) as u16)?;
         self.mark_instruction_address_end(offset);
@@ -2379,16 +2426,16 @@ impl Machine for MachineARM64 {
     fn get_label(&mut self) -> Label {
         self.assembler.new_dynamic_label()
     }
-    fn emit_label(&mut self, label: Label) -> Result<(), CodegenError> {
+    fn emit_label(&mut self, label: Label) -> Result<(), CompileError> {
         self.assembler.emit_label(label)
     }
     fn get_grp_for_call(&self) -> GPR {
         GPR::X27
     }
-    fn emit_call_register(&mut self, reg: GPR) -> Result<(), CodegenError> {
+    fn emit_call_register(&mut self, reg: GPR) -> Result<(), CompileError> {
         self.assembler.emit_call_register(reg)
     }
-    fn emit_call_label(&mut self, label: Label) -> Result<(), CodegenError> {
+    fn emit_call_label(&mut self, label: Label) -> Result<(), CompileError> {
         self.assembler.emit_call_label(label)
     }
     fn get_gpr_for_ret(&self) -> GPR {
@@ -2405,16 +2452,16 @@ impl Machine for MachineARM64 {
     fn arch_emit_indirect_call_with_trampoline(
         &mut self,
         location: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.assembler
             .arch_emit_indirect_call_with_trampoline(location)
     }
 
-    fn emit_debug_breakpoint(&mut self) -> Result<(), CodegenError> {
+    fn emit_debug_breakpoint(&mut self) -> Result<(), CompileError> {
         self.assembler.emit_brk()
     }
 
-    fn emit_call_location(&mut self, location: Location) -> Result<(), CodegenError> {
+    fn emit_call_location(&mut self, location: Location) -> Result<(), CompileError> {
         let mut temps = vec![];
         let loc = self.location_to_reg(
             Size::S64,
@@ -2439,7 +2486,7 @@ impl Machine for MachineARM64 {
         _size: Size,
         _source: Location,
         _dest: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         codegen_error!("singlepass location_address not implemented")
     }
     // logic
@@ -2449,7 +2496,7 @@ impl Machine for MachineARM64 {
         _source: Location,
         _dest: Location,
         _flags: bool,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         codegen_error!("singlepass location_and not implemented")
     }
     fn location_xor(
@@ -2458,7 +2505,7 @@ impl Machine for MachineARM64 {
         _source: Location,
         _dest: Location,
         _flags: bool,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         codegen_error!("singlepass location_xor not implemented")
     }
     fn location_or(
@@ -2467,7 +2514,7 @@ impl Machine for MachineARM64 {
         _source: Location,
         _dest: Location,
         _flags: bool,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         codegen_error!("singlepass location_or not implemented")
     }
     fn location_test(
@@ -2475,7 +2522,7 @@ impl Machine for MachineARM64 {
         _size: Size,
         _source: Location,
         _dest: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         codegen_error!("singlepass location_test not implemented")
     }
     // math
@@ -2485,7 +2532,7 @@ impl Machine for MachineARM64 {
         source: Location,
         dest: Location,
         flags: bool,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let src = self.location_to_reg(size, source, &mut temps, ImmType::Bits12, true, None)?;
         let dst = self.location_to_reg(size, dest, &mut temps, ImmType::None, true, None)?;
@@ -2508,7 +2555,7 @@ impl Machine for MachineARM64 {
         source: Location,
         dest: Location,
         flags: bool,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let src = self.location_to_reg(size, source, &mut temps, ImmType::Bits12, true, None)?;
         let dst = self.location_to_reg(size, dest, &mut temps, ImmType::None, true, None)?;
@@ -2530,38 +2577,38 @@ impl Machine for MachineARM64 {
         size: Size,
         source: Location,
         dest: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop(Assembler::emit_cmp, size, source, dest, false)
     }
-    fn jmp_unconditionnal(&mut self, label: Label) -> Result<(), CodegenError> {
+    fn jmp_unconditionnal(&mut self, label: Label) -> Result<(), CompileError> {
         self.assembler.emit_b_label(label)
     }
-    fn jmp_on_equal(&mut self, label: Label) -> Result<(), CodegenError> {
+    fn jmp_on_equal(&mut self, label: Label) -> Result<(), CompileError> {
         self.assembler.emit_bcond_label_far(Condition::Eq, label)
     }
-    fn jmp_on_different(&mut self, label: Label) -> Result<(), CodegenError> {
+    fn jmp_on_different(&mut self, label: Label) -> Result<(), CompileError> {
         self.assembler.emit_bcond_label_far(Condition::Ne, label)
     }
-    fn jmp_on_above(&mut self, label: Label) -> Result<(), CodegenError> {
+    fn jmp_on_above(&mut self, label: Label) -> Result<(), CompileError> {
         self.assembler.emit_bcond_label_far(Condition::Hi, label)
     }
-    fn jmp_on_aboveequal(&mut self, label: Label) -> Result<(), CodegenError> {
+    fn jmp_on_aboveequal(&mut self, label: Label) -> Result<(), CompileError> {
         self.assembler.emit_bcond_label_far(Condition::Cs, label)
     }
-    fn jmp_on_belowequal(&mut self, label: Label) -> Result<(), CodegenError> {
+    fn jmp_on_belowequal(&mut self, label: Label) -> Result<(), CompileError> {
         self.assembler.emit_bcond_label_far(Condition::Ls, label)
     }
-    fn jmp_on_overflow(&mut self, label: Label) -> Result<(), CodegenError> {
+    fn jmp_on_overflow(&mut self, label: Label) -> Result<(), CompileError> {
         self.assembler.emit_bcond_label_far(Condition::Cs, label)
     }
 
     // jmp table
-    fn emit_jmp_to_jumptable(&mut self, label: Label, cond: Location) -> Result<(), CodegenError> {
-        let tmp1 = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+    fn emit_jmp_to_jumptable(&mut self, label: Label, cond: Location) -> Result<(), CompileError> {
+        let tmp1 = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
-        let tmp2 = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+        let tmp2 = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
 
         self.assembler.emit_load_label(tmp1, label)?;
@@ -2580,23 +2627,23 @@ impl Machine for MachineARM64 {
         Ok(())
     }
 
-    fn align_for_loop(&mut self) -> Result<(), CodegenError> {
+    fn align_for_loop(&mut self) -> Result<(), CompileError> {
         // noting to do on ARM64
         Ok(())
     }
 
-    fn emit_ret(&mut self) -> Result<(), CodegenError> {
+    fn emit_ret(&mut self) -> Result<(), CompileError> {
         self.assembler.emit_ret()
     }
 
-    fn emit_push(&mut self, size: Size, loc: Location) -> Result<(), CodegenError> {
+    fn emit_push(&mut self, size: Size, loc: Location) -> Result<(), CompileError> {
         self.emit_push(size, loc)
     }
-    fn emit_pop(&mut self, size: Size, loc: Location) -> Result<(), CodegenError> {
+    fn emit_pop(&mut self, size: Size, loc: Location) -> Result<(), CompileError> {
         self.emit_pop(size, loc)
     }
 
-    fn emit_memory_fence(&mut self) -> Result<(), CodegenError> {
+    fn emit_memory_fence(&mut self) -> Result<(), CompileError> {
         self.assembler.emit_dmb()
     }
 
@@ -2607,13 +2654,13 @@ impl Machine for MachineARM64 {
         _source: Location,
         _size_op: Size,
         _dest: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         codegen_error!("singlepass location_neg unimplemented");
     }
 
-    fn emit_imul_imm32(&mut self, size: Size, imm32: u32, gpr: GPR) -> Result<(), CodegenError> {
-        let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+    fn emit_imul_imm32(&mut self, size: Size, imm32: u32, gpr: GPR) -> Result<(), CompileError> {
+        let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
         self.assembler
             .emit_mov_imm(Location::GPR(tmp), imm32 as u64)?;
@@ -2633,7 +2680,7 @@ impl Machine for MachineARM64 {
         sz: Size,
         src: Location,
         dst: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop(Assembler::emit_mov, sz, src, dst, true)
     }
     fn emit_relaxed_cmp(
@@ -2641,7 +2688,7 @@ impl Machine for MachineARM64 {
         sz: Size,
         src: Location,
         dst: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop(Assembler::emit_cmp, sz, src, dst, false)
     }
     fn emit_relaxed_zero_extension(
@@ -2650,7 +2697,7 @@ impl Machine for MachineARM64 {
         _src: Location,
         _sz_dst: Size,
         _dst: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         codegen_error!("singlepass emit_relaxed_zero_extension unimplemented");
     }
     fn emit_relaxed_sign_extension(
@@ -2659,7 +2706,7 @@ impl Machine for MachineARM64 {
         src: Location,
         sz_dst: Size,
         dst: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         match (src, dst) {
             (Location::Memory(_, _), Location::GPR(_)) => match sz_src {
                 Size::S8 => self.emit_relaxed_ldr8s(sz_dst, dst, src),
@@ -2695,7 +2742,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_add,
             Size::S32,
@@ -2710,7 +2757,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_sub,
             Size::S32,
@@ -2725,7 +2772,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_mul,
             Size::S32,
@@ -2742,7 +2789,7 @@ impl Machine for MachineARM64 {
         ret: Location,
         integer_division_by_zero: Label,
         _integer_overflow: Label,
-    ) -> Result<usize, CodegenError> {
+    ) -> Result<usize, CompileError> {
         let mut temps = vec![];
         let src1 = self.location_to_reg(Size::S32, loc_a, &mut temps, ImmType::None, true, None)?;
         let src2 = self.location_to_reg(Size::S32, loc_b, &mut temps, ImmType::None, true, None)?;
@@ -2767,7 +2814,7 @@ impl Machine for MachineARM64 {
         ret: Location,
         integer_division_by_zero: Label,
         integer_overflow: Label,
-    ) -> Result<usize, CodegenError> {
+    ) -> Result<usize, CompileError> {
         let mut temps = vec![];
         let src1 = self.location_to_reg(Size::S32, loc_a, &mut temps, ImmType::None, true, None)?;
         let src2 = self.location_to_reg(Size::S32, loc_b, &mut temps, ImmType::None, true, None)?;
@@ -2809,14 +2856,14 @@ impl Machine for MachineARM64 {
         ret: Location,
         integer_division_by_zero: Label,
         _integer_overflow: Label,
-    ) -> Result<usize, CodegenError> {
+    ) -> Result<usize, CompileError> {
         let mut temps = vec![];
         let src1 = self.location_to_reg(Size::S32, loc_a, &mut temps, ImmType::None, true, None)?;
         let src2 = self.location_to_reg(Size::S32, loc_b, &mut temps, ImmType::None, true, None)?;
         let dest = self.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
         let dest = if dest == src1 || dest == src2 {
-            let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                message: "singlepass cannot acquire temp gpr".to_string(),
+            let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
             })?;
             temps.push(tmp);
             self.assembler
@@ -2847,14 +2894,14 @@ impl Machine for MachineARM64 {
         ret: Location,
         integer_division_by_zero: Label,
         _integer_overflow: Label,
-    ) -> Result<usize, CodegenError> {
+    ) -> Result<usize, CompileError> {
         let mut temps = vec![];
         let src1 = self.location_to_reg(Size::S32, loc_a, &mut temps, ImmType::None, true, None)?;
         let src2 = self.location_to_reg(Size::S32, loc_b, &mut temps, ImmType::None, true, None)?;
         let dest = self.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
         let dest = if dest == src1 || dest == src2 {
-            let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                message: "singlepass cannot acquire temp gpr".to_string(),
+            let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
             })?;
             temps.push(tmp);
             self.assembler
@@ -2883,7 +2930,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_and,
             Size::S32,
@@ -2898,7 +2945,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_or,
             Size::S32,
@@ -2913,7 +2960,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_eor,
             Size::S32,
@@ -2928,7 +2975,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i32_dynamic_b(Condition::Ge, loc_a, loc_b, ret)
     }
     fn i32_cmp_gt_s(
@@ -2936,7 +2983,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i32_dynamic_b(Condition::Gt, loc_a, loc_b, ret)
     }
     fn i32_cmp_le_s(
@@ -2944,7 +2991,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i32_dynamic_b(Condition::Le, loc_a, loc_b, ret)
     }
     fn i32_cmp_lt_s(
@@ -2952,7 +2999,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i32_dynamic_b(Condition::Lt, loc_a, loc_b, ret)
     }
     fn i32_cmp_ge_u(
@@ -2960,7 +3007,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i32_dynamic_b(Condition::Cs, loc_a, loc_b, ret)
     }
     fn i32_cmp_gt_u(
@@ -2968,7 +3015,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i32_dynamic_b(Condition::Hi, loc_a, loc_b, ret)
     }
     fn i32_cmp_le_u(
@@ -2976,7 +3023,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i32_dynamic_b(Condition::Ls, loc_a, loc_b, ret)
     }
     fn i32_cmp_lt_u(
@@ -2984,7 +3031,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i32_dynamic_b(Condition::Cc, loc_a, loc_b, ret)
     }
     fn i32_cmp_ne(
@@ -2992,7 +3039,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i32_dynamic_b(Condition::Ne, loc_a, loc_b, ret)
     }
     fn i32_cmp_eq(
@@ -3000,13 +3047,13 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i32_dynamic_b(Condition::Eq, loc_a, loc_b, ret)
     }
-    fn i32_clz(&mut self, src: Location, dst: Location) -> Result<(), CodegenError> {
+    fn i32_clz(&mut self, src: Location, dst: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop(Assembler::emit_clz, Size::S32, src, dst, true)
     }
-    fn i32_ctz(&mut self, src: Location, dst: Location) -> Result<(), CodegenError> {
+    fn i32_ctz(&mut self, src: Location, dst: Location) -> Result<(), CompileError> {
         let mut temps = vec![];
         let src = self.location_to_reg(Size::S32, src, &mut temps, ImmType::None, true, None)?;
         let dest = self.location_to_reg(Size::S32, dst, &mut temps, ImmType::None, false, None)?;
@@ -3020,15 +3067,15 @@ impl Machine for MachineARM64 {
         }
         Ok(())
     }
-    fn i32_popcnt(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn i32_popcnt(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         // no opcode for that.
         // 2 solutions: using NEON CNT, that count bits per Byte, or using clz with some shift and loop
         let mut temps = vec![];
         let src = self.location_to_reg(Size::S32, loc, &mut temps, ImmType::None, true, None)?;
         let dest = self.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
         let src = if src == loc {
-            let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                message: "singlepass cannot acquire temp gpr".to_string(),
+            let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
             })?;
             temps.push(tmp);
             self.assembler
@@ -3038,8 +3085,8 @@ impl Machine for MachineARM64 {
             src
         };
         let tmp = {
-            let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                message: "singlepass cannot acquire temp gpr".to_string(),
+            let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
             })?;
             temps.push(tmp);
             Location::GPR(tmp)
@@ -3051,11 +3098,11 @@ impl Machine for MachineARM64 {
         self.assembler.emit_cbz_label(Size::S32, src, label_exit)?; // src==0, exit
         self.assembler.emit_label(label_loop)?; // loop:
         self.assembler
-            .emit_add(Size::S32, dest, Location::Imm8(1), dest)?; // inc dest
+            .emit_add(Size::S32, dest, Location::Imm8(1), dest)?; // dest += 1
         self.assembler.emit_clz(Size::S32, src, tmp)?; // clz src => tmp
-        self.assembler
-            .emit_add(Size::S32, tmp, Location::Imm8(1), tmp)?; // inc tmp
         self.assembler.emit_lsl(Size::S32, src, tmp, src)?; // src << tmp => src
+        self.assembler
+            .emit_lsl(Size::S32, src, Location::Imm8(1), src)?; // src << 1 => src
         self.assembler.emit_cbnz_label(Size::S32, src, label_loop)?; // if src!=0 goto loop
         self.assembler.emit_label(label_exit)?;
         if ret != dest {
@@ -3071,7 +3118,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_lsl,
             Size::S32,
@@ -3086,7 +3133,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_lsr,
             Size::S32,
@@ -3101,7 +3148,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_asr,
             Size::S32,
@@ -3116,7 +3163,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let src2 = match loc_b {
             Location::Imm8(imm) => Location::Imm8(32 - (imm & 31)),
@@ -3155,7 +3202,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_ror,
             Size::S32,
@@ -3168,13 +3215,14 @@ impl Machine for MachineARM64 {
     fn i32_load(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -3184,19 +3232,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr32(Size::S32, ret, Location::Memory(addr, 0)),
         )
     }
     fn i32_load_8u(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -3206,19 +3256,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr8(Size::S32, ret, Location::Memory(addr, 0)),
         )
     }
     fn i32_load_8s(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -3228,19 +3280,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr8s(Size::S32, ret, Location::Memory(addr, 0)),
         )
     }
     fn i32_load_16u(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -3250,19 +3304,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr16(Size::S32, ret, Location::Memory(addr, 0)),
         )
     }
     fn i32_load_16s(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -3272,55 +3328,93 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr16s(Size::S32, ret, Location::Memory(addr, 0)),
         )
     }
     fn i32_atomic_load(
         &mut self,
-        _addr: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_load unimplemented");
+        addr: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            addr,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_ldr32(Size::S32, ret, Location::Memory(addr, 0)),
+        )
     }
     fn i32_atomic_load_8u(
         &mut self,
-        _addr: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_load_8u unimplemented");
+        addr: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            addr,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_ldr8(Size::S32, ret, Location::Memory(addr, 0)),
+        )
     }
     fn i32_atomic_load_16u(
         &mut self,
-        _addr: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_load_16u unimplemented");
+        addr: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            addr,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_ldr16(Size::S32, ret, Location::Memory(addr, 0)),
+        )
     }
     fn i32_save(
         &mut self,
         target_value: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         target_addr: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             target_addr,
             memarg,
@@ -3330,19 +3424,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_str32(target_value, Location::Memory(addr, 0)),
         )
     }
     fn i32_save_8(
         &mut self,
         target_value: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         target_addr: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             target_addr,
             memarg,
@@ -3352,19 +3448,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_str8(target_value, Location::Memory(addr, 0)),
         )
     }
     fn i32_save_16(
         &mut self,
         target_value: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         target_addr: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             target_addr,
             memarg,
@@ -3374,348 +3472,1333 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_str16(target_value, Location::Memory(addr, 0)),
         )
     }
     fn i32_atomic_save(
         &mut self,
-        _value: Location,
-        _memarg: &MemoryImmediate,
-        _target_addr: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_save unimplemented");
+        target_value: Location,
+        memarg: &MemArg,
+        target_addr: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target_addr,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_str32(target_value, Location::Memory(addr, 0)),
+        )?;
+        self.assembler.emit_dmb()
     }
     fn i32_atomic_save_8(
         &mut self,
-        _value: Location,
-        _memarg: &MemoryImmediate,
-        _target_addr: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_save_8 unimplemented");
+        target_value: Location,
+        memarg: &MemArg,
+        target_addr: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target_addr,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_str8(target_value, Location::Memory(addr, 0)),
+        )?;
+        self.assembler.emit_dmb()
     }
     fn i32_atomic_save_16(
         &mut self,
-        _value: Location,
-        _memarg: &MemoryImmediate,
-        _target_addr: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_save_16 unimplemented");
+        target_value: Location,
+        memarg: &MemArg,
+        target_addr: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target_addr,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_str16(target_value, Location::Memory(addr, 0)),
+        )?;
+        self.assembler.emit_dmb()
     }
     // i32 atomic Add with i32
     fn i32_atomic_add(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_add unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_add32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Add with u8
     fn i32_atomic_add_8u(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_add_8u unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_add32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrb(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Add with u16
     fn i32_atomic_add_16u(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_add_16u unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_add32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrh(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Sub with i32
     fn i32_atomic_sub(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_sub unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_sub32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Sub with u8
     fn i32_atomic_sub_8u(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_sub_8u unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_sub32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrb(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Sub with u16
     fn i32_atomic_sub_16u(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_sub_16u unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_sub32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrh(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic And with i32
     fn i32_atomic_and(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_and unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_and32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic And with u8
     fn i32_atomic_and_8u(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_and_8u unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_and32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrb(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic And with u16
     fn i32_atomic_and_16u(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_and_16u unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_and32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrh(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Or with i32
     fn i32_atomic_or(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_or unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_or32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Or with u8
     fn i32_atomic_or_8u(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_or_8u unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_or32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrb(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Or with u16
     fn i32_atomic_or_16u(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_or_16u unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_or32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrh(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Xor with i32
     fn i32_atomic_xor(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_xor unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_xor32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Xor with u8
     fn i32_atomic_xor_8u(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_xor_8u unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_xor32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrb(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Xor with u16
     fn i32_atomic_xor_16u(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_xor_16u unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_xor32(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrh(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Exchange with i32
     fn i32_atomic_xchg(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_xchg unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S32, loc, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Exchange with u8
     fn i32_atomic_xchg_8u(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_xchg_8u unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S32, loc, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S32, dst, Location::GPR(addr))?;
+                this.assembler.emit_stlxrb(
+                    Size::S32,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Exchange with u16
     fn i32_atomic_xchg_16u(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_xchg_16u unimplemented");
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S32, loc, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S32, dst, Location::GPR(addr))?;
+                this.assembler.emit_stlxrh(
+                    Size::S32,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Exchange with i32
     fn i32_atomic_cmpxchg(
         &mut self,
-        _new: Location,
-        _cmp: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_cmpxchg unimplemented");
+        new: Location,
+        cmp: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S32, new, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+                let nosame = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_relaxed_cmp(Size::S32, dst, cmp)?;
+                this.assembler.emit_bcond_label(Condition::Ne, nosame)?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                this.emit_label(nosame)?;
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Exchange with u8
     fn i32_atomic_cmpxchg_8u(
         &mut self,
-        _new: Location,
-        _cmp: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_cmpxchg_8u unimplemented");
+        new: Location,
+        cmp: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S32, new, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+                let nosame = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_relaxed_cmp(Size::S32, dst, cmp)?;
+                this.assembler.emit_bcond_label(Condition::Ne, nosame)?;
+                this.assembler.emit_stlxrb(
+                    Size::S32,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                this.emit_label(nosame)?;
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
     // i32 atomic Exchange with u16
     fn i32_atomic_cmpxchg_16u(
         &mut self,
-        _new: Location,
-        _cmp: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i32_atomic_cmpxchg_16u unimplemented");
+        new: Location,
+        cmp: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S32, new, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+                let nosame = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_relaxed_cmp(Size::S32, dst, cmp)?;
+                this.assembler.emit_bcond_label(Condition::Ne, nosame)?;
+                this.assembler.emit_stlxrh(
+                    Size::S32,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                this.emit_label(nosame)?;
+                if dst != ret {
+                    this.move_location(Size::S32, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
     }
 
     fn emit_call_with_reloc(
         &mut self,
         _calling_convention: CallingConvention,
         reloc_target: RelocationTarget,
-    ) -> Result<Vec<Relocation>, CodegenError> {
+    ) -> Result<Vec<Relocation>, CompileError> {
         let mut relocations = vec![];
         let next = self.get_label();
         let reloc_at = self.assembler.get_offset().0;
@@ -3735,7 +4818,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_add,
             Size::S64,
@@ -3750,7 +4833,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_sub,
             Size::S64,
@@ -3765,7 +4848,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_mul,
             Size::S64,
@@ -3782,7 +4865,7 @@ impl Machine for MachineARM64 {
         ret: Location,
         integer_division_by_zero: Label,
         _integer_overflow: Label,
-    ) -> Result<usize, CodegenError> {
+    ) -> Result<usize, CompileError> {
         let mut temps = vec![];
         let src1 = self.location_to_reg(Size::S64, loc_a, &mut temps, ImmType::None, true, None)?;
         let src2 = self.location_to_reg(Size::S64, loc_b, &mut temps, ImmType::None, true, None)?;
@@ -3807,7 +4890,7 @@ impl Machine for MachineARM64 {
         ret: Location,
         integer_division_by_zero: Label,
         integer_overflow: Label,
-    ) -> Result<usize, CodegenError> {
+    ) -> Result<usize, CompileError> {
         let mut temps = vec![];
         let src1 = self.location_to_reg(Size::S64, loc_a, &mut temps, ImmType::None, true, None)?;
         let src2 = self.location_to_reg(Size::S64, loc_b, &mut temps, ImmType::None, true, None)?;
@@ -3849,14 +4932,14 @@ impl Machine for MachineARM64 {
         ret: Location,
         integer_division_by_zero: Label,
         _integer_overflow: Label,
-    ) -> Result<usize, CodegenError> {
+    ) -> Result<usize, CompileError> {
         let mut temps = vec![];
         let src1 = self.location_to_reg(Size::S64, loc_a, &mut temps, ImmType::None, true, None)?;
         let src2 = self.location_to_reg(Size::S64, loc_b, &mut temps, ImmType::None, true, None)?;
         let dest = self.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
         let dest = if dest == src1 || dest == src2 {
-            let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                message: "singlepass cannot acquire temp gpr".to_string(),
+            let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
             })?;
             temps.push(tmp);
             self.assembler
@@ -3887,14 +4970,14 @@ impl Machine for MachineARM64 {
         ret: Location,
         integer_division_by_zero: Label,
         _integer_overflow: Label,
-    ) -> Result<usize, CodegenError> {
+    ) -> Result<usize, CompileError> {
         let mut temps = vec![];
         let src1 = self.location_to_reg(Size::S64, loc_a, &mut temps, ImmType::None, true, None)?;
         let src2 = self.location_to_reg(Size::S64, loc_b, &mut temps, ImmType::None, true, None)?;
         let dest = self.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
         let dest = if dest == src1 || dest == src2 {
-            let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                message: "singlepass cannot acquire temp gpr".to_string(),
+            let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
             })?;
             temps.push(tmp);
             self.assembler
@@ -3923,7 +5006,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_and,
             Size::S64,
@@ -3938,7 +5021,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_or,
             Size::S64,
@@ -3953,7 +5036,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_eor,
             Size::S64,
@@ -3968,7 +5051,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i64_dynamic_b(Condition::Ge, loc_a, loc_b, ret)
     }
     fn i64_cmp_gt_s(
@@ -3976,7 +5059,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i64_dynamic_b(Condition::Gt, loc_a, loc_b, ret)
     }
     fn i64_cmp_le_s(
@@ -3984,7 +5067,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i64_dynamic_b(Condition::Le, loc_a, loc_b, ret)
     }
     fn i64_cmp_lt_s(
@@ -3992,7 +5075,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i64_dynamic_b(Condition::Lt, loc_a, loc_b, ret)
     }
     fn i64_cmp_ge_u(
@@ -4000,7 +5083,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i64_dynamic_b(Condition::Cs, loc_a, loc_b, ret)
     }
     fn i64_cmp_gt_u(
@@ -4008,7 +5091,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i64_dynamic_b(Condition::Hi, loc_a, loc_b, ret)
     }
     fn i64_cmp_le_u(
@@ -4016,7 +5099,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i64_dynamic_b(Condition::Ls, loc_a, loc_b, ret)
     }
     fn i64_cmp_lt_u(
@@ -4024,7 +5107,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i64_dynamic_b(Condition::Cc, loc_a, loc_b, ret)
     }
     fn i64_cmp_ne(
@@ -4032,7 +5115,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i64_dynamic_b(Condition::Ne, loc_a, loc_b, ret)
     }
     fn i64_cmp_eq(
@@ -4040,13 +5123,13 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_cmpop_i64_dynamic_b(Condition::Eq, loc_a, loc_b, ret)
     }
-    fn i64_clz(&mut self, src: Location, dst: Location) -> Result<(), CodegenError> {
+    fn i64_clz(&mut self, src: Location, dst: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop(Assembler::emit_clz, Size::S64, src, dst, true)
     }
-    fn i64_ctz(&mut self, src: Location, dst: Location) -> Result<(), CodegenError> {
+    fn i64_ctz(&mut self, src: Location, dst: Location) -> Result<(), CompileError> {
         let mut temps = vec![];
         let src = self.location_to_reg(Size::S64, src, &mut temps, ImmType::None, true, None)?;
         let dest = self.location_to_reg(Size::S64, dst, &mut temps, ImmType::None, false, None)?;
@@ -4060,13 +5143,13 @@ impl Machine for MachineARM64 {
         }
         Ok(())
     }
-    fn i64_popcnt(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn i64_popcnt(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         let mut temps = vec![];
         let src = self.location_to_reg(Size::S64, loc, &mut temps, ImmType::None, true, None)?;
         let dest = self.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
         let src = if src == loc {
-            let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                message: "singlepass cannot acquire temp gpr".to_string(),
+            let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
             })?;
             temps.push(tmp);
             self.assembler
@@ -4076,8 +5159,8 @@ impl Machine for MachineARM64 {
             src
         };
         let tmp = {
-            let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-                message: "singlepass cannot acquire temp gpr".to_string(),
+            let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+                CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
             })?;
             temps.push(tmp);
             Location::GPR(tmp)
@@ -4085,16 +5168,16 @@ impl Machine for MachineARM64 {
         let label_loop = self.assembler.get_label();
         let label_exit = self.assembler.get_label();
         self.assembler
-            .emit_mov(Size::S32, Location::GPR(GPR::XzrSp), dest)?;
-        self.assembler.emit_cbz_label(Size::S64, src, label_exit)?;
+            .emit_mov(Size::S32, Location::GPR(GPR::XzrSp), dest)?; // dest <= 0
+        self.assembler.emit_cbz_label(Size::S64, src, label_exit)?; // src == 0, then goto label_exit
         self.assembler.emit_label(label_loop)?;
         self.assembler
-            .emit_add(Size::S32, dest, Location::Imm8(1), dest)?;
-        self.assembler.emit_clz(Size::S64, src, tmp)?;
+            .emit_add(Size::S32, dest, Location::Imm8(1), dest)?; // dest += 1
+        self.assembler.emit_clz(Size::S64, src, tmp)?; // clz src => tmp
+        self.assembler.emit_lsl(Size::S64, src, tmp, src)?; // src << tmp => src
         self.assembler
-            .emit_add(Size::S32, tmp, Location::Imm8(1), tmp)?;
-        self.assembler.emit_lsl(Size::S64, src, tmp, src)?;
-        self.assembler.emit_cbnz_label(Size::S64, src, label_loop)?;
+            .emit_lsl(Size::S64, src, Location::Imm8(1), src)?; // src << 1 => src
+        self.assembler.emit_cbnz_label(Size::S64, src, label_loop)?; // src != 0, then goto label_loop
         self.assembler.emit_label(label_exit)?;
         if ret != dest {
             self.move_location(Size::S64, dest, ret)?;
@@ -4109,7 +5192,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_lsl,
             Size::S64,
@@ -4124,7 +5207,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_lsr,
             Size::S64,
@@ -4139,7 +5222,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_asr,
             Size::S64,
@@ -4154,7 +5237,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         // there is no ROL on ARM64. We use ROR with 64-value instead
         let mut temps = vec![];
         let src2 = match loc_b {
@@ -4194,7 +5277,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3(
             Assembler::emit_ror,
             Size::S64,
@@ -4207,13 +5290,14 @@ impl Machine for MachineARM64 {
     fn i64_load(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -4223,19 +5307,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr64(Size::S64, ret, Location::Memory(addr, 0)),
         )
     }
     fn i64_load_8u(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -4245,19 +5331,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr8(Size::S64, ret, Location::Memory(addr, 0)),
         )
     }
     fn i64_load_8s(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -4267,19 +5355,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr8s(Size::S64, ret, Location::Memory(addr, 0)),
         )
     }
     fn i64_load_16u(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -4289,19 +5379,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr16(Size::S64, ret, Location::Memory(addr, 0)),
         )
     }
     fn i64_load_16s(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -4311,19 +5403,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr16s(Size::S64, ret, Location::Memory(addr, 0)),
         )
     }
     fn i64_load_32u(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -4333,19 +5427,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr32(Size::S64, ret, Location::Memory(addr, 0)),
         )
     }
     fn i64_load_32s(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -4355,67 +5451,117 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr32s(Size::S64, ret, Location::Memory(addr, 0)),
         )
     }
     fn i64_atomic_load(
         &mut self,
-        _addr: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_load unimplemented");
+        addr: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            addr,
+            memarg,
+            true,
+            8,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_ldr64(Size::S64, ret, Location::Memory(addr, 0)),
+        )
     }
     fn i64_atomic_load_8u(
         &mut self,
-        _addr: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_load_8u unimplemented");
+        addr: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            addr,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_ldr8(Size::S64, ret, Location::Memory(addr, 0)),
+        )
     }
     fn i64_atomic_load_16u(
         &mut self,
-        _addr: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_load_16u unimplemented");
+        addr: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            addr,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_ldr16(Size::S64, ret, Location::Memory(addr, 0)),
+        )
     }
     fn i64_atomic_load_32u(
         &mut self,
-        _addr: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_load_32u unimplemented");
+        addr: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            addr,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_ldr32(Size::S64, ret, Location::Memory(addr, 0)),
+        )
     }
     fn i64_save(
         &mut self,
         target_value: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         target_addr: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             target_addr,
             memarg,
@@ -4425,19 +5571,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_str64(target_value, Location::Memory(addr, 0)),
         )
     }
     fn i64_save_8(
         &mut self,
         target_value: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         target_addr: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             target_addr,
             memarg,
@@ -4447,19 +5595,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_str8(target_value, Location::Memory(addr, 0)),
         )
     }
     fn i64_save_16(
         &mut self,
         target_value: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         target_addr: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             target_addr,
             memarg,
@@ -4469,19 +5619,21 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_str16(target_value, Location::Memory(addr, 0)),
         )
     }
     fn i64_save_32(
         &mut self,
         target_value: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         target_addr: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             target_addr,
             memarg,
@@ -4491,464 +5643,1778 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_str32(target_value, Location::Memory(addr, 0)),
         )
     }
     fn i64_atomic_save(
         &mut self,
-        _value: Location,
-        _memarg: &MemoryImmediate,
-        _target_addr: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_save unimplemented");
+        target_value: Location,
+        memarg: &MemArg,
+        target_addr: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target_addr,
+            memarg,
+            true,
+            8,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_str64(target_value, Location::Memory(addr, 0)),
+        )?;
+        self.assembler.emit_dmb()
     }
     fn i64_atomic_save_8(
         &mut self,
-        _value: Location,
-        _memarg: &MemoryImmediate,
-        _target_addr: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_save_8 unimplemented");
+        target_value: Location,
+        memarg: &MemArg,
+        target_addr: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target_addr,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_str8(target_value, Location::Memory(addr, 0)),
+        )?;
+        self.assembler.emit_dmb()
     }
     fn i64_atomic_save_16(
         &mut self,
-        _value: Location,
-        _memarg: &MemoryImmediate,
-        _target_addr: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_save_16 unimplemented");
+        target_value: Location,
+        memarg: &MemArg,
+        target_addr: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target_addr,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_str16(target_value, Location::Memory(addr, 0)),
+        )?;
+        self.assembler.emit_dmb()
     }
     fn i64_atomic_save_32(
         &mut self,
-        _value: Location,
-        _memarg: &MemoryImmediate,
-        _target_addr: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_save_32 unimplemented");
+        target_value: Location,
+        memarg: &MemArg,
+        target_addr: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target_addr,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| this.emit_relaxed_str32(target_value, Location::Memory(addr, 0)),
+        )?;
+        self.assembler.emit_dmb()
     }
     // i64 atomic Add with i64
     fn i64_atomic_add(
         &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_add unimplemented");
-    }
-    // i64 atomic Add with u8
-    fn i64_atomic_add_8u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_add_8u unimplemented");
-    }
-    // i64 atomic Add with u16
-    fn i64_atomic_add_16u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_add_16u unimplemented");
-    }
-    // i64 atomic Add with u32
-    fn i64_atomic_add_32u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_add_32u unimplemented");
-    }
-    // i64 atomic Sub with i64
-    fn i64_atomic_sub(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_sub unimplemented");
-    }
-    // i64 atomic Sub with u8
-    fn i64_atomic_sub_8u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_sub_8u unimplemented");
-    }
-    // i64 atomic Sub with u16
-    fn i64_atomic_sub_16u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_sub_16u unimplemented");
-    }
-    // i64 atomic Sub with u32
-    fn i64_atomic_sub_32u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_sub_32u unimplemented");
-    }
-    // i64 atomic And with i64
-    fn i64_atomic_and(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_and unimplemented");
-    }
-    // i64 atomic And with u8
-    fn i64_atomic_and_8u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_and_8u unimplemented");
-    }
-    // i64 atomic And with u16
-    fn i64_atomic_and_16u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_and_16u unimplemented");
-    }
-    // i64 atomic And with u32
-    fn i64_atomic_and_32u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_and_32u unimplemented");
-    }
-    // i64 atomic Or with i64
-    fn i64_atomic_or(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_or unimplemented");
-    }
-    // i64 atomic Or with u8
-    fn i64_atomic_or_8u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_or_8u unimplemented");
-    }
-    // i64 atomic Or with u16
-    fn i64_atomic_or_16u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_or_16u unimplemented");
-    }
-    // i64 atomic Or with u32
-    fn i64_atomic_or_32u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_or_32u unimplemented");
-    }
-    // i64 atomic xor with i64
-    fn i64_atomic_xor(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_xor unimplemented");
-    }
-    // i64 atomic xor with u8
-    fn i64_atomic_xor_8u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_xor_8u unimplemented");
-    }
-    // i64 atomic xor with u16
-    fn i64_atomic_xor_16u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_xor_16u unimplemented");
-    }
-    // i64 atomic xor with u32
-    fn i64_atomic_xor_32u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_xor_32u unimplemented");
-    }
-    // i64 atomic Exchange with i64
-    fn i64_atomic_xchg(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_xchg unimplemented");
-    }
-    // i64 atomic Exchange with u8
-    fn i64_atomic_xchg_8u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_xchg_8u unimplemented");
-    }
-    // i64 atomic Exchange with u16
-    fn i64_atomic_xchg_16u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_xchg_16u unimplemented");
-    }
-    // i64 atomic Exchange with u32
-    fn i64_atomic_xchg_32u(
-        &mut self,
-        _loc: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_xchg_32u unimplemented");
-    }
-    // i64 atomic Exchange with i64
-    fn i64_atomic_cmpxchg(
-        &mut self,
-        _new: Location,
-        _cmp: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_cmpxchg unimplemented");
-    }
-    // i64 atomic Exchange with u8
-    fn i64_atomic_cmpxchg_8u(
-        &mut self,
-        _new: Location,
-        _cmp: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_cmpxchg_8u unimplemented");
-    }
-    // i64 atomic Exchange with u16
-    fn i64_atomic_cmpxchg_16u(
-        &mut self,
-        _new: Location,
-        _cmp: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_cmpxchg_16u unimplemented");
-    }
-    // i64 atomic Exchange with u32
-    fn i64_atomic_cmpxchg_32u(
-        &mut self,
-        _new: Location,
-        _cmp: Location,
-        _target: Location,
-        _memarg: &MemoryImmediate,
-        _ret: Location,
-        _need_check: bool,
-        _imported_memories: bool,
-        _offset: i32,
-        _heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
-        codegen_error!("singlepass i64_atomic_cmpxchg_32u unimplemented");
-    }
-
-    fn f32_load(
-        &mut self,
-        addr: Location,
-        memarg: &MemoryImmediate,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            8,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_add64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Add with u8
+    fn i64_atomic_add_8u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_add64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrb(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Add with u16
+    fn i64_atomic_add_16u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_add64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrh(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Add with u32
+    fn i64_atomic_add_32u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_add64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Sub with i64
+    fn i64_atomic_sub(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            8,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_sub64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Sub with u8
+    fn i64_atomic_sub_8u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_sub64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrb(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Sub with u16
+    fn i64_atomic_sub_16u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_sub64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrh(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Sub with u32
+    fn i64_atomic_sub_32u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_sub64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic And with i64
+    fn i64_atomic_and(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            8,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_and64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic And with u8
+    fn i64_atomic_and_8u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_and64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrb(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic And with u16
+    fn i64_atomic_and_16u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_and64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrh(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic And with u32
+    fn i64_atomic_and_32u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_and64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Or with i64
+    fn i64_atomic_or(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            8,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_or64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Or with u8
+    fn i64_atomic_or_8u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_or64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrb(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Or with u16
+    fn i64_atomic_or_16u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_or64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrh(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Or with u32
+    fn i64_atomic_or_32u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_or64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Xor with i64
+    fn i64_atomic_xor(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            8,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_xor64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Xor with u8
+    fn i64_atomic_xor_8u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_xor64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrb(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Xor with u16
+    fn i64_atomic_xor_16u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_binop_xor64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxrh(
+                    Size::S64,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Xor with u32
+    fn i64_atomic_xor_32u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp1 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let tmp2 = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_binop_xor64(dst, loc, Location::GPR(tmp1))?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp2),
+                    Location::GPR(tmp1),
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp2), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Exchange with i64
+    fn i64_atomic_xchg(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            8,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S64, loc, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S64, dst, Location::GPR(addr))?;
+                this.assembler.emit_stlxr(
+                    Size::S64,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Exchange with u8
+    fn i64_atomic_xchg_8u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S64, loc, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S64, dst, Location::GPR(addr))?;
+                this.assembler.emit_stlxrb(
+                    Size::S64,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Exchange with u16
+    fn i64_atomic_xchg_16u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S64, loc, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S64, dst, Location::GPR(addr))?;
+                this.assembler.emit_stlxrh(
+                    Size::S64,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Exchange with u32
+    fn i64_atomic_xchg_32u(
+        &mut self,
+        loc: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S64, loc, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Exchange with i64
+    fn i64_atomic_cmpxchg(
+        &mut self,
+        new: Location,
+        cmp: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            8,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S64, new, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+                let nosame = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_relaxed_cmp(Size::S64, dst, cmp)?;
+                this.assembler.emit_bcond_label(Condition::Ne, nosame)?;
+                this.assembler.emit_stlxr(
+                    Size::S64,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                this.emit_label(nosame)?;
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Exchange with u8
+    fn i64_atomic_cmpxchg_8u(
+        &mut self,
+        new: Location,
+        cmp: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            1,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S64, new, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+                let nosame = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrb(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_relaxed_cmp(Size::S64, dst, cmp)?;
+                this.assembler.emit_bcond_label(Condition::Ne, nosame)?;
+                this.assembler.emit_stlxrb(
+                    Size::S64,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                this.emit_label(nosame)?;
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Exchange with u16
+    fn i64_atomic_cmpxchg_16u(
+        &mut self,
+        new: Location,
+        cmp: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            2,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S64, new, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+                let nosame = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxrh(Size::S64, dst, Location::GPR(addr))?;
+                this.emit_relaxed_cmp(Size::S64, dst, cmp)?;
+                this.assembler.emit_bcond_label(Condition::Ne, nosame)?;
+                this.assembler.emit_stlxrh(
+                    Size::S64,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                this.emit_label(nosame)?;
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+    // i64 atomic Exchange with u32
+    fn i64_atomic_cmpxchg_32u(
+        &mut self,
+        new: Location,
+        cmp: Location,
+        target: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
+        self.memory_op(
+            target,
+            memarg,
+            true,
+            4,
+            need_check,
+            imported_memories,
+            offset,
+            heap_access_oob,
+            unaligned_atomic,
+            |this, addr| {
+                let mut temps = vec![];
+                let tmp = this.acquire_temp_gpr().ok_or_else(|| {
+                    CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
+                })?;
+                let dst =
+                    this.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
+                let org =
+                    this.location_to_reg(Size::S64, new, &mut temps, ImmType::None, false, None)?;
+                let reread = this.get_label();
+                let nosame = this.get_label();
+
+                this.emit_label(reread)?;
+                this.assembler
+                    .emit_ldaxr(Size::S32, dst, Location::GPR(addr))?;
+                this.emit_relaxed_cmp(Size::S64, dst, cmp)?;
+                this.assembler.emit_bcond_label(Condition::Ne, nosame)?;
+                this.assembler.emit_stlxr(
+                    Size::S32,
+                    Location::GPR(tmp),
+                    org,
+                    Location::GPR(addr),
+                )?;
+                this.assembler
+                    .emit_cbnz_label(Size::S32, Location::GPR(tmp), reread)?;
+                this.assembler.emit_dmb()?;
+
+                this.emit_label(nosame)?;
+                if dst != ret {
+                    this.move_location(Size::S64, ret, dst)?;
+                }
+                for r in temps {
+                    this.release_gpr(r);
+                }
+                Ok(())
+            },
+        )
+    }
+
+    fn f32_load(
+        &mut self,
+        addr: Location,
+        memarg: &MemArg,
+        ret: Location,
+        need_check: bool,
+        imported_memories: bool,
+        offset: i32,
+        heap_access_oob: Label,
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -4958,20 +7424,22 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr32(Size::S32, ret, Location::Memory(addr, 0)),
         )
     }
     fn f32_save(
         &mut self,
         target_value: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         target_addr: Location,
         canonicalize: bool,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         let canonicalize = canonicalize && self.arch_supports_canonicalize_nan();
         self.memory_op(
             target_addr,
@@ -4982,6 +7450,7 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| {
                 if !canonicalize {
                     this.emit_relaxed_str32(target_value, Location::Memory(addr, 0))
@@ -4994,13 +7463,14 @@ impl Machine for MachineARM64 {
     fn f64_load(
         &mut self,
         addr: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         ret: Location,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         self.memory_op(
             addr,
             memarg,
@@ -5010,20 +7480,22 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| this.emit_relaxed_ldr64(Size::S64, ret, Location::Memory(addr, 0)),
         )
     }
     fn f64_save(
         &mut self,
         target_value: Location,
-        memarg: &MemoryImmediate,
+        memarg: &MemArg,
         target_addr: Location,
         canonicalize: bool,
         need_check: bool,
         imported_memories: bool,
         offset: i32,
         heap_access_oob: Label,
-    ) -> Result<(), CodegenError> {
+        unaligned_atomic: Label,
+    ) -> Result<(), CompileError> {
         let canonicalize = canonicalize && self.arch_supports_canonicalize_nan();
         self.memory_op(
             target_addr,
@@ -5034,6 +7506,7 @@ impl Machine for MachineARM64 {
             imported_memories,
             offset,
             heap_access_oob,
+            unaligned_atomic,
             |this, addr| {
                 if !canonicalize {
                     this.emit_relaxed_str64(target_value, Location::Memory(addr, 0))
@@ -5049,7 +7522,7 @@ impl Machine for MachineARM64 {
         loc: Location,
         signed: bool,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut gprs = vec![];
         let mut neons = vec![];
         let src = self.location_to_reg(Size::S64, loc, &mut gprs, ImmType::NoneXzr, true, None)?;
@@ -5075,7 +7548,7 @@ impl Machine for MachineARM64 {
         loc: Location,
         signed: bool,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut gprs = vec![];
         let mut neons = vec![];
         let src = self.location_to_reg(Size::S32, loc, &mut gprs, ImmType::NoneXzr, true, None)?;
@@ -5101,7 +7574,7 @@ impl Machine for MachineARM64 {
         loc: Location,
         signed: bool,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut gprs = vec![];
         let mut neons = vec![];
         let src = self.location_to_reg(Size::S64, loc, &mut gprs, ImmType::NoneXzr, true, None)?;
@@ -5127,7 +7600,7 @@ impl Machine for MachineARM64 {
         loc: Location,
         signed: bool,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut gprs = vec![];
         let mut neons = vec![];
         let src = self.location_to_reg(Size::S32, loc, &mut gprs, ImmType::NoneXzr, true, None)?;
@@ -5154,7 +7627,7 @@ impl Machine for MachineARM64 {
         ret: Location,
         signed: bool,
         sat: bool,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut gprs = vec![];
         let mut neons = vec![];
         let src = self.location_to_neon(Size::S64, loc, &mut neons, ImmType::None, true)?;
@@ -5192,7 +7665,7 @@ impl Machine for MachineARM64 {
         ret: Location,
         signed: bool,
         sat: bool,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut gprs = vec![];
         let mut neons = vec![];
         let src = self.location_to_neon(Size::S64, loc, &mut neons, ImmType::None, true)?;
@@ -5230,7 +7703,7 @@ impl Machine for MachineARM64 {
         ret: Location,
         signed: bool,
         sat: bool,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut gprs = vec![];
         let mut neons = vec![];
         let src = self.location_to_neon(Size::S32, loc, &mut neons, ImmType::None, true)?;
@@ -5268,7 +7741,7 @@ impl Machine for MachineARM64 {
         ret: Location,
         signed: bool,
         sat: bool,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut gprs = vec![];
         let mut neons = vec![];
         let src = self.location_to_neon(Size::S32, loc, &mut neons, ImmType::None, true)?;
@@ -5300,18 +7773,18 @@ impl Machine for MachineARM64 {
         }
         Ok(())
     }
-    fn convert_f64_f32(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn convert_f64_f32(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_fcvt, Size::S32, loc, ret, true)
     }
-    fn convert_f32_f64(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn convert_f32_f64(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_fcvt, Size::S64, loc, ret, true)
     }
-    fn f64_neg(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn f64_neg(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_fneg, Size::S64, loc, ret, true)
     }
-    fn f64_abs(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
-        let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+    fn f64_abs(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
+        let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
 
         self.move_location(Size::S64, loc, Location::GPR(tmp))?;
@@ -5326,7 +7799,7 @@ impl Machine for MachineARM64 {
         self.release_gpr(tmp);
         Ok(())
     }
-    fn emit_i64_copysign(&mut self, tmp1: GPR, tmp2: GPR) -> Result<(), CodegenError> {
+    fn emit_i64_copysign(&mut self, tmp1: GPR, tmp2: GPR) -> Result<(), CompileError> {
         self.assembler.emit_and(
             Size::S64,
             Location::GPR(tmp1),
@@ -5348,19 +7821,19 @@ impl Machine for MachineARM64 {
             Location::GPR(tmp1),
         )
     }
-    fn f64_sqrt(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn f64_sqrt(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_fsqrt, Size::S64, loc, ret, true)
     }
-    fn f64_trunc(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn f64_trunc(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_frintz, Size::S64, loc, ret, true)
     }
-    fn f64_ceil(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn f64_ceil(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_frintp, Size::S64, loc, ret, true)
     }
-    fn f64_floor(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn f64_floor(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_frintm, Size::S64, loc, ret, true)
     }
-    fn f64_nearest(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn f64_nearest(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_frintn, Size::S64, loc, ret, true)
     }
     fn f64_cmp_ge(
@@ -5368,7 +7841,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
         self.emit_relaxed_binop_neon(Assembler::emit_fcmp, Size::S64, loc_b, loc_a, false)?;
@@ -5386,7 +7859,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
         self.emit_relaxed_binop_neon(Assembler::emit_fcmp, Size::S64, loc_b, loc_a, false)?;
@@ -5404,7 +7877,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
         self.emit_relaxed_binop_neon(Assembler::emit_fcmp, Size::S64, loc_a, loc_b, false)?;
@@ -5422,7 +7895,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
         self.emit_relaxed_binop_neon(Assembler::emit_fcmp, Size::S64, loc_a, loc_b, false)?;
@@ -5440,7 +7913,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
         self.emit_relaxed_binop_neon(Assembler::emit_fcmp, Size::S64, loc_a, loc_b, false)?;
@@ -5458,7 +7931,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(Size::S64, ret, &mut temps, ImmType::None, false, None)?;
         self.emit_relaxed_binop_neon(Assembler::emit_fcmp, Size::S64, loc_a, loc_b, false)?;
@@ -5476,7 +7949,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let old_fpcr = self.set_default_nan(&mut temps)?;
         self.emit_relaxed_binop3_neon(
@@ -5498,7 +7971,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let old_fpcr = self.set_default_nan(&mut temps)?;
         self.emit_relaxed_binop3_neon(
@@ -5520,7 +7993,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3_neon(
             Assembler::emit_fadd,
             Size::S64,
@@ -5535,7 +8008,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3_neon(
             Assembler::emit_fsub,
             Size::S64,
@@ -5550,7 +8023,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3_neon(
             Assembler::emit_fmul,
             Size::S64,
@@ -5565,7 +8038,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3_neon(
             Assembler::emit_fdiv,
             Size::S64,
@@ -5575,12 +8048,12 @@ impl Machine for MachineARM64 {
             ImmType::None,
         )
     }
-    fn f32_neg(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn f32_neg(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_fneg, Size::S32, loc, ret, true)
     }
-    fn f32_abs(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
-        let tmp = self.acquire_temp_gpr().ok_or(CodegenError {
-            message: "singlepass cannot acquire temp gpr".to_string(),
+    fn f32_abs(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
+        let tmp = self.acquire_temp_gpr().ok_or_else(|| {
+            CompileError::Codegen("singlepass cannot acquire temp gpr".to_owned())
         })?;
         self.move_location(Size::S32, loc, Location::GPR(tmp))?;
         self.assembler.emit_and(
@@ -5593,7 +8066,7 @@ impl Machine for MachineARM64 {
         self.release_gpr(tmp);
         Ok(())
     }
-    fn emit_i32_copysign(&mut self, tmp1: GPR, tmp2: GPR) -> Result<(), CodegenError> {
+    fn emit_i32_copysign(&mut self, tmp1: GPR, tmp2: GPR) -> Result<(), CompileError> {
         self.assembler.emit_and(
             Size::S32,
             Location::GPR(tmp1),
@@ -5613,19 +8086,19 @@ impl Machine for MachineARM64 {
             Location::GPR(tmp1),
         )
     }
-    fn f32_sqrt(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn f32_sqrt(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_fsqrt, Size::S32, loc, ret, true)
     }
-    fn f32_trunc(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn f32_trunc(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_frintz, Size::S32, loc, ret, true)
     }
-    fn f32_ceil(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn f32_ceil(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_frintp, Size::S32, loc, ret, true)
     }
-    fn f32_floor(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn f32_floor(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_frintm, Size::S32, loc, ret, true)
     }
-    fn f32_nearest(&mut self, loc: Location, ret: Location) -> Result<(), CodegenError> {
+    fn f32_nearest(&mut self, loc: Location, ret: Location) -> Result<(), CompileError> {
         self.emit_relaxed_binop_neon(Assembler::emit_frintn, Size::S32, loc, ret, true)
     }
     fn f32_cmp_ge(
@@ -5633,7 +8106,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
         self.emit_relaxed_binop_neon(Assembler::emit_fcmp, Size::S32, loc_b, loc_a, false)?;
@@ -5651,7 +8124,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
         self.emit_relaxed_binop_neon(Assembler::emit_fcmp, Size::S32, loc_b, loc_a, false)?;
@@ -5669,7 +8142,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
         self.emit_relaxed_binop_neon(Assembler::emit_fcmp, Size::S32, loc_a, loc_b, false)?;
@@ -5687,7 +8160,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
         self.emit_relaxed_binop_neon(Assembler::emit_fcmp, Size::S32, loc_a, loc_b, false)?;
@@ -5705,7 +8178,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
         self.emit_relaxed_binop_neon(Assembler::emit_fcmp, Size::S32, loc_a, loc_b, false)?;
@@ -5723,7 +8196,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let dest = self.location_to_reg(Size::S32, ret, &mut temps, ImmType::None, false, None)?;
         self.emit_relaxed_binop_neon(Assembler::emit_fcmp, Size::S32, loc_a, loc_b, false)?;
@@ -5741,7 +8214,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let old_fpcr = self.set_default_nan(&mut temps)?;
         self.emit_relaxed_binop3_neon(
@@ -5763,7 +8236,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         let mut temps = vec![];
         let old_fpcr = self.set_default_nan(&mut temps)?;
         self.emit_relaxed_binop3_neon(
@@ -5785,7 +8258,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3_neon(
             Assembler::emit_fadd,
             Size::S32,
@@ -5800,7 +8273,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3_neon(
             Assembler::emit_fsub,
             Size::S32,
@@ -5815,7 +8288,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3_neon(
             Assembler::emit_fmul,
             Size::S32,
@@ -5830,7 +8303,7 @@ impl Machine for MachineARM64 {
         loc_a: Location,
         loc_b: Location,
         ret: Location,
-    ) -> Result<(), CodegenError> {
+    ) -> Result<(), CompileError> {
         self.emit_relaxed_binop3_neon(
             Assembler::emit_fdiv,
             Size::S32,
@@ -5845,7 +8318,7 @@ impl Machine for MachineARM64 {
         &self,
         sig: &FunctionType,
         calling_convention: CallingConvention,
-    ) -> Result<FunctionBody, CodegenError> {
+    ) -> Result<FunctionBody, CompileError> {
         gen_std_trampoline_arm64(sig, calling_convention)
     }
     // Generates dynamic import function call trampoline for a function type.
@@ -5854,7 +8327,7 @@ impl Machine for MachineARM64 {
         vmoffsets: &VMOffsets,
         sig: &FunctionType,
         calling_convention: CallingConvention,
-    ) -> Result<FunctionBody, CodegenError> {
+    ) -> Result<FunctionBody, CompileError> {
         gen_std_dynamic_import_trampoline_arm64(vmoffsets, sig, calling_convention)
     }
     // Singlepass calls import functions through a trampoline.
@@ -5864,7 +8337,7 @@ impl Machine for MachineARM64 {
         index: FunctionIndex,
         sig: &FunctionType,
         calling_convention: CallingConvention,
-    ) -> Result<CustomSection, CodegenError> {
+    ) -> Result<CustomSection, CompileError> {
         gen_import_call_trampoline_arm64(vmoffsets, index, sig, calling_convention)
     }
     #[cfg(feature = "unwind")]
@@ -5925,5 +8398,331 @@ impl Machine for MachineARM64 {
 
     fn gen_windows_unwind_info(&mut self, _code_len: usize) -> Option<Vec<u8>> {
         None
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn test_move_location(machine: &mut MachineARM64, size: Size) -> Result<(), CompileError> {
+        machine.move_location(size, Location::GPR(GPR::X1), Location::GPR(GPR::X2))?;
+        machine.move_location(size, Location::GPR(GPR::X1), Location::Memory(GPR::X2, 10))?;
+        machine.move_location(size, Location::GPR(GPR::X1), Location::Memory(GPR::X2, -10))?;
+        machine.move_location(
+            size,
+            Location::GPR(GPR::X1),
+            Location::Memory(GPR::X2, 1024),
+        )?;
+        machine.move_location(
+            size,
+            Location::GPR(GPR::X1),
+            Location::Memory(GPR::X2, -1024),
+        )?;
+        machine.move_location(size, Location::Memory(GPR::X2, 10), Location::GPR(GPR::X1))?;
+        machine.move_location(size, Location::Memory(GPR::X2, -10), Location::GPR(GPR::X1))?;
+        machine.move_location(
+            size,
+            Location::Memory(GPR::X2, 1024),
+            Location::GPR(GPR::X1),
+        )?;
+        machine.move_location(
+            size,
+            Location::Memory(GPR::X2, -1024),
+            Location::GPR(GPR::X1),
+        )?;
+        machine.move_location(size, Location::GPR(GPR::X1), Location::SIMD(NEON::V0))?;
+        machine.move_location(size, Location::SIMD(NEON::V0), Location::GPR(GPR::X1))?;
+        machine.move_location(
+            size,
+            Location::SIMD(NEON::V0),
+            Location::Memory(GPR::X2, 10),
+        )?;
+        machine.move_location(
+            size,
+            Location::SIMD(NEON::V0),
+            Location::Memory(GPR::X2, -10),
+        )?;
+        machine.move_location(
+            size,
+            Location::SIMD(NEON::V0),
+            Location::Memory(GPR::X2, 1024),
+        )?;
+        machine.move_location(
+            size,
+            Location::SIMD(NEON::V0),
+            Location::Memory(GPR::X2, -1024),
+        )?;
+        machine.move_location(
+            size,
+            Location::Memory(GPR::X2, 10),
+            Location::SIMD(NEON::V0),
+        )?;
+        machine.move_location(
+            size,
+            Location::Memory(GPR::X2, -10),
+            Location::SIMD(NEON::V0),
+        )?;
+        machine.move_location(
+            size,
+            Location::Memory(GPR::X2, 1024),
+            Location::SIMD(NEON::V0),
+        )?;
+        machine.move_location(
+            size,
+            Location::Memory(GPR::X2, -1024),
+            Location::SIMD(NEON::V0),
+        )?;
+
+        Ok(())
+    }
+
+    fn test_move_location_extended(
+        machine: &mut MachineARM64,
+        signed: bool,
+        sized: Size,
+    ) -> Result<(), CompileError> {
+        machine.move_location_extend(
+            sized,
+            signed,
+            Location::GPR(GPR::X0),
+            Size::S64,
+            Location::GPR(GPR::X1),
+        )?;
+        machine.move_location_extend(
+            sized,
+            signed,
+            Location::GPR(GPR::X0),
+            Size::S64,
+            Location::Memory(GPR::X1, 10),
+        )?;
+        machine.move_location_extend(
+            sized,
+            signed,
+            Location::GPR(GPR::X0),
+            Size::S64,
+            Location::Memory(GPR::X1, 16),
+        )?;
+        machine.move_location_extend(
+            sized,
+            signed,
+            Location::GPR(GPR::X0),
+            Size::S64,
+            Location::Memory(GPR::X1, -16),
+        )?;
+        machine.move_location_extend(
+            sized,
+            signed,
+            Location::GPR(GPR::X0),
+            Size::S64,
+            Location::Memory(GPR::X1, 1024),
+        )?;
+        machine.move_location_extend(
+            sized,
+            signed,
+            Location::GPR(GPR::X0),
+            Size::S64,
+            Location::Memory(GPR::X1, -1024),
+        )?;
+        machine.move_location_extend(
+            sized,
+            signed,
+            Location::Memory(GPR::X0, 10),
+            Size::S64,
+            Location::GPR(GPR::X1),
+        )?;
+
+        Ok(())
+    }
+
+    fn test_binop_op(
+        machine: &mut MachineARM64,
+        op: fn(&mut MachineARM64, Location, Location, Location) -> Result<(), CompileError>,
+    ) -> Result<(), CompileError> {
+        op(
+            machine,
+            Location::GPR(GPR::X2),
+            Location::GPR(GPR::X2),
+            Location::GPR(GPR::X0),
+        )?;
+        op(
+            machine,
+            Location::GPR(GPR::X2),
+            Location::Imm32(10),
+            Location::GPR(GPR::X0),
+        )?;
+        op(
+            machine,
+            Location::GPR(GPR::X0),
+            Location::GPR(GPR::X0),
+            Location::GPR(GPR::X0),
+        )?;
+        op(
+            machine,
+            Location::Imm32(10),
+            Location::GPR(GPR::X2),
+            Location::GPR(GPR::X0),
+        )?;
+        op(
+            machine,
+            Location::GPR(GPR::X0),
+            Location::GPR(GPR::X2),
+            Location::Memory(GPR::X0, 10),
+        )?;
+        op(
+            machine,
+            Location::GPR(GPR::X0),
+            Location::Memory(GPR::X2, 16),
+            Location::Memory(GPR::X0, 10),
+        )?;
+        op(
+            machine,
+            Location::Memory(GPR::X0, 0),
+            Location::Memory(GPR::X2, 16),
+            Location::Memory(GPR::X0, 10),
+        )?;
+
+        Ok(())
+    }
+
+    fn test_float_binop_op(
+        machine: &mut MachineARM64,
+        op: fn(&mut MachineARM64, Location, Location, Location) -> Result<(), CompileError>,
+    ) -> Result<(), CompileError> {
+        op(
+            machine,
+            Location::SIMD(NEON::V3),
+            Location::SIMD(NEON::V2),
+            Location::SIMD(NEON::V0),
+        )?;
+        op(
+            machine,
+            Location::SIMD(NEON::V0),
+            Location::SIMD(NEON::V2),
+            Location::SIMD(NEON::V0),
+        )?;
+        op(
+            machine,
+            Location::SIMD(NEON::V0),
+            Location::SIMD(NEON::V0),
+            Location::SIMD(NEON::V0),
+        )?;
+        op(
+            machine,
+            Location::Memory(GPR::X0, 0),
+            Location::SIMD(NEON::V2),
+            Location::SIMD(NEON::V0),
+        )?;
+        op(
+            machine,
+            Location::Memory(GPR::X0, 0),
+            Location::Memory(GPR::X1, 10),
+            Location::SIMD(NEON::V0),
+        )?;
+        op(
+            machine,
+            Location::Memory(GPR::X0, 0),
+            Location::Memory(GPR::X1, 16),
+            Location::Memory(GPR::X2, 32),
+        )?;
+        op(
+            machine,
+            Location::SIMD(NEON::V0),
+            Location::Memory(GPR::X1, 16),
+            Location::Memory(GPR::X2, 32),
+        )?;
+        op(
+            machine,
+            Location::SIMD(NEON::V0),
+            Location::SIMD(NEON::V1),
+            Location::Memory(GPR::X2, 32),
+        )?;
+
+        Ok(())
+    }
+
+    fn test_float_cmp_op(
+        machine: &mut MachineARM64,
+        op: fn(&mut MachineARM64, Location, Location, Location) -> Result<(), CompileError>,
+    ) -> Result<(), CompileError> {
+        op(
+            machine,
+            Location::SIMD(NEON::V3),
+            Location::SIMD(NEON::V2),
+            Location::GPR(GPR::X0),
+        )?;
+        op(
+            machine,
+            Location::SIMD(NEON::V0),
+            Location::SIMD(NEON::V0),
+            Location::GPR(GPR::X0),
+        )?;
+        op(
+            machine,
+            Location::Memory(GPR::X1, 0),
+            Location::SIMD(NEON::V2),
+            Location::GPR(GPR::X0),
+        )?;
+        op(
+            machine,
+            Location::Memory(GPR::X1, 0),
+            Location::Memory(GPR::X2, 10),
+            Location::GPR(GPR::X0),
+        )?;
+        op(
+            machine,
+            Location::Memory(GPR::X1, 0),
+            Location::Memory(GPR::X2, 16),
+            Location::Memory(GPR::X0, 32),
+        )?;
+        op(
+            machine,
+            Location::SIMD(NEON::V0),
+            Location::Memory(GPR::X2, 16),
+            Location::Memory(GPR::X0, 32),
+        )?;
+        op(
+            machine,
+            Location::SIMD(NEON::V0),
+            Location::SIMD(NEON::V1),
+            Location::Memory(GPR::X0, 32),
+        )?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn tests_arm64() -> Result<(), CompileError> {
+        let mut machine = MachineARM64::new();
+
+        test_move_location(&mut machine, Size::S32)?;
+        test_move_location(&mut machine, Size::S64)?;
+        test_move_location_extended(&mut machine, false, Size::S8)?;
+        test_move_location_extended(&mut machine, false, Size::S16)?;
+        test_move_location_extended(&mut machine, false, Size::S32)?;
+        test_move_location_extended(&mut machine, true, Size::S8)?;
+        test_move_location_extended(&mut machine, true, Size::S16)?;
+        test_move_location_extended(&mut machine, true, Size::S32)?;
+        test_binop_op(&mut machine, MachineARM64::emit_binop_add32)?;
+        test_binop_op(&mut machine, MachineARM64::emit_binop_add64)?;
+        test_binop_op(&mut machine, MachineARM64::emit_binop_sub32)?;
+        test_binop_op(&mut machine, MachineARM64::emit_binop_sub64)?;
+        test_binop_op(&mut machine, MachineARM64::emit_binop_and32)?;
+        test_binop_op(&mut machine, MachineARM64::emit_binop_and64)?;
+        test_binop_op(&mut machine, MachineARM64::emit_binop_xor32)?;
+        test_binop_op(&mut machine, MachineARM64::emit_binop_xor64)?;
+        test_binop_op(&mut machine, MachineARM64::emit_binop_or32)?;
+        test_binop_op(&mut machine, MachineARM64::emit_binop_or64)?;
+        test_binop_op(&mut machine, MachineARM64::emit_binop_mul32)?;
+        test_binop_op(&mut machine, MachineARM64::emit_binop_mul64)?;
+        test_float_binop_op(&mut machine, MachineARM64::f32_add)?;
+        test_float_binop_op(&mut machine, MachineARM64::f32_sub)?;
+        test_float_binop_op(&mut machine, MachineARM64::f32_mul)?;
+        test_float_binop_op(&mut machine, MachineARM64::f32_div)?;
+        test_float_cmp_op(&mut machine, MachineARM64::f32_cmp_eq)?;
+        test_float_cmp_op(&mut machine, MachineARM64::f32_cmp_lt)?;
+        test_float_cmp_op(&mut machine, MachineARM64::f32_cmp_le)?;
+
+        Ok(())
     }
 }

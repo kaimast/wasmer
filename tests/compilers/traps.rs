@@ -4,7 +4,7 @@ use wasmer::*;
 
 #[compiler_test(traps)]
 fn test_trap_return(config: crate::Config) -> Result<()> {
-    let store = config.store();
+    let mut store = config.store();
     let wat = r#"
         (module
         (func $hello (import "" "hello"))
@@ -14,9 +14,12 @@ fn test_trap_return(config: crate::Config) -> Result<()> {
 
     let module = Module::new(&store, wat)?;
     let hello_type = FunctionType::new(vec![], vec![]);
-    let hello_func = Function::new(&store, &hello_type, |_| Err(RuntimeError::new("test 123")));
+    let hello_func = Function::new(&mut store, &hello_type, |_| {
+        Err(RuntimeError::new("test 123"))
+    });
 
     let instance = Instance::new(
+        &mut store,
         &module,
         &imports! {
             "" => {
@@ -29,7 +32,9 @@ fn test_trap_return(config: crate::Config) -> Result<()> {
         .get_function("run")
         .expect("expected function export");
 
-    let e = run_func.call(&[]).err().expect("error calling function");
+    let e = run_func
+        .call(&mut store, &[])
+        .expect_err("error calling function");
 
     assert_eq!(e.message(), "test 123");
 
@@ -39,7 +44,7 @@ fn test_trap_return(config: crate::Config) -> Result<()> {
 #[cfg_attr(target_env = "musl", ignore)]
 #[compiler_test(traps)]
 fn test_trap_trace(config: crate::Config) -> Result<()> {
-    let store = config.store();
+    let mut store = config.store();
     let wat = r#"
         (module $hello_mod
             (func (export "run") (call $hello))
@@ -48,13 +53,15 @@ fn test_trap_trace(config: crate::Config) -> Result<()> {
     "#;
 
     let module = Module::new(&store, wat)?;
-    let instance = Instance::new(&module, &imports! {})?;
+    let instance = Instance::new(&mut store, &module, &imports! {})?;
     let run_func = instance
         .exports
         .get_function("run")
         .expect("expected function export");
 
-    let e = run_func.call(&[]).err().expect("error calling function");
+    let e = run_func
+        .call(&mut store, &[])
+        .expect_err("error calling function");
 
     let trace = e.trace();
     assert_eq!(trace.len(), 2);
@@ -75,7 +82,7 @@ fn test_trap_trace(config: crate::Config) -> Result<()> {
 
 #[compiler_test(traps)]
 fn test_trap_trace_cb(config: crate::Config) -> Result<()> {
-    let store = config.store();
+    let mut store = config.store();
     let wat = r#"
         (module $hello_mod
             (import "" "throw" (func $throw))
@@ -85,10 +92,11 @@ fn test_trap_trace_cb(config: crate::Config) -> Result<()> {
     "#;
 
     let fn_type = FunctionType::new(vec![], vec![]);
-    let fn_func = Function::new(&store, &fn_type, |_| Err(RuntimeError::new("cb throw")));
+    let fn_func = Function::new(&mut store, &fn_type, |_| Err(RuntimeError::new("cb throw")));
 
     let module = Module::new(&store, wat)?;
     let instance = Instance::new(
+        &mut store,
         &module,
         &imports! {
             "" => {
@@ -101,7 +109,9 @@ fn test_trap_trace_cb(config: crate::Config) -> Result<()> {
         .get_function("run")
         .expect("expected function export");
 
-    let e = run_func.call(&[]).err().expect("error calling function");
+    let e = run_func
+        .call(&mut store, &[])
+        .expect_err("error calling function");
 
     let trace = e.trace();
     println!("Trace {:?}", trace);
@@ -119,7 +129,7 @@ fn test_trap_trace_cb(config: crate::Config) -> Result<()> {
 #[cfg_attr(target_env = "musl", ignore)]
 #[compiler_test(traps)]
 fn test_trap_stack_overflow(config: crate::Config) -> Result<()> {
-    let store = config.store();
+    let mut store = config.store();
     let wat = r#"
         (module $rec_mod
             (func $run (export "run") (call $run))
@@ -127,13 +137,15 @@ fn test_trap_stack_overflow(config: crate::Config) -> Result<()> {
     "#;
 
     let module = Module::new(&store, wat)?;
-    let instance = Instance::new(&module, &imports! {})?;
+    let instance = Instance::new(&mut store, &module, &imports! {})?;
     let run_func = instance
         .exports
         .get_function("run")
         .expect("expected function export");
 
-    let e = run_func.call(&[]).err().expect("error calling function");
+    let e = run_func
+        .call(&mut store, &[])
+        .expect_err("error calling function");
 
     // We specifically don't check the stack trace here: stack traces after
     // stack overflows are not generally possible due to unreliable unwinding
@@ -146,7 +158,7 @@ fn test_trap_stack_overflow(config: crate::Config) -> Result<()> {
 #[cfg_attr(target_env = "musl", ignore)]
 #[compiler_test(traps)]
 fn trap_display_pretty(config: crate::Config) -> Result<()> {
-    let store = config.store();
+    let mut store = config.store();
     let wat = r#"
         (module $m
             (func $die unreachable)
@@ -157,13 +169,15 @@ fn trap_display_pretty(config: crate::Config) -> Result<()> {
     "#;
 
     let module = Module::new(&store, wat)?;
-    let instance = Instance::new(&module, &imports! {})?;
+    let instance = Instance::new(&mut store, &module, &imports! {})?;
     let run_func = instance
         .exports
         .get_function("bar")
         .expect("expected function export");
 
-    let e = run_func.call(&[]).err().expect("error calling function");
+    let e = run_func
+        .call(&mut store, &[])
+        .expect_err("error calling function");
     assert_eq!(
         e.to_string(),
         "\
@@ -179,7 +193,7 @@ RuntimeError: unreachable
 #[cfg_attr(target_env = "musl", ignore)]
 #[compiler_test(traps)]
 fn trap_display_multi_module(config: crate::Config) -> Result<()> {
-    let store = config.store();
+    let mut store = config.store();
     let wat = r#"
         (module $a
             (func $die unreachable)
@@ -190,7 +204,7 @@ fn trap_display_multi_module(config: crate::Config) -> Result<()> {
     "#;
 
     let module = Module::new(&store, wat)?;
-    let instance = Instance::new(&module, &imports! {})?;
+    let instance = Instance::new(&mut store, &module, &imports! {})?;
     let bar = instance.exports.get_function("bar")?.clone();
 
     let wat = r#"
@@ -202,6 +216,7 @@ fn trap_display_multi_module(config: crate::Config) -> Result<()> {
     "#;
     let module = Module::new(&store, wat)?;
     let instance = Instance::new(
+        &mut store,
         &module,
         &imports! {
             "" => {
@@ -214,7 +229,9 @@ fn trap_display_multi_module(config: crate::Config) -> Result<()> {
         .get_function("bar2")
         .expect("expected function export");
 
-    let e = bar2.call(&[]).err().expect("error calling function");
+    let e = bar2
+        .call(&mut store, &[])
+        .expect_err("error calling function");
     assert_eq!(
         e.to_string(),
         "\
@@ -231,7 +248,7 @@ RuntimeError: unreachable
 
 #[compiler_test(traps)]
 fn trap_start_function_import(config: crate::Config) -> Result<()> {
-    let store = config.store();
+    let mut store = config.store();
     let binary = r#"
         (module $a
             (import "" "" (func $foo))
@@ -239,10 +256,11 @@ fn trap_start_function_import(config: crate::Config) -> Result<()> {
         )
     "#;
 
-    let module = Module::new(&store, &binary)?;
+    let module = Module::new(&store, binary)?;
     let sig = FunctionType::new(vec![], vec![]);
-    let func = Function::new(&store, &sig, |_| Err(RuntimeError::new("user trap")));
+    let func = Function::new(&mut store, &sig, |_| Err(RuntimeError::new("user trap")));
     let err = Instance::new(
+        &mut store,
         &module,
         &imports! {
             "" => {
@@ -254,7 +272,8 @@ fn trap_start_function_import(config: crate::Config) -> Result<()> {
     .unwrap();
     match err {
         InstantiationError::Link(_)
-        | InstantiationError::HostEnvInitialization(_)
+        | InstantiationError::DifferentStores
+        | InstantiationError::DifferentArchOS
         | InstantiationError::CpuFeature(_) => {
             panic!("It should be a start error")
         }
@@ -268,7 +287,7 @@ fn trap_start_function_import(config: crate::Config) -> Result<()> {
 
 #[compiler_test(traps)]
 fn rust_panic_import(config: crate::Config) -> Result<()> {
-    let store = config.store();
+    let mut store = config.store();
     let binary = r#"
         (module $a
             (import "" "foo" (func $foo))
@@ -278,21 +297,23 @@ fn rust_panic_import(config: crate::Config) -> Result<()> {
         )
     "#;
 
-    let module = Module::new(&store, &binary)?;
+    let module = Module::new(&store, binary)?;
     let sig = FunctionType::new(vec![], vec![]);
-    let func = Function::new(&store, &sig, |_| panic!("this is a panic"));
+    let func = Function::new(&mut store, &sig, |_| panic!("this is a panic"));
+    let f0 = Function::new_typed(&mut store, || panic!("this is another panic"));
     let instance = Instance::new(
+        &mut store,
         &module,
         &imports! {
             "" => {
                 "foo" => func,
-                "bar" => Function::new_native(&store, || panic!("this is another panic"))
+                "bar" => f0
             }
         },
     )?;
     let func = instance.exports.get_function("foo")?.clone();
     let err = panic::catch_unwind(AssertUnwindSafe(|| {
-        drop(func.call(&[]));
+        drop(func.call(&mut store, &[]));
     }))
     .unwrap_err();
     assert_eq!(err.downcast_ref::<&'static str>(), Some(&"this is a panic"));
@@ -313,7 +334,7 @@ fn rust_panic_import(config: crate::Config) -> Result<()> {
 
 #[compiler_test(traps)]
 fn rust_panic_start_function(config: crate::Config) -> Result<()> {
-    let store = config.store();
+    let mut store = config.store();
     let binary = r#"
         (module $a
             (import "" "" (func $foo))
@@ -321,11 +342,12 @@ fn rust_panic_start_function(config: crate::Config) -> Result<()> {
         )
     "#;
 
-    let module = Module::new(&store, &binary)?;
+    let module = Module::new(&store, binary)?;
     let sig = FunctionType::new(vec![], vec![]);
-    let func = Function::new(&store, &sig, |_| panic!("this is a panic"));
+    let func = Function::new(&mut store, &sig, |_| panic!("this is a panic"));
     let err = panic::catch_unwind(AssertUnwindSafe(|| {
         drop(Instance::new(
+            &mut store,
             &module,
             &imports! {
                 "" => {
@@ -337,9 +359,10 @@ fn rust_panic_start_function(config: crate::Config) -> Result<()> {
     .unwrap_err();
     assert_eq!(err.downcast_ref::<&'static str>(), Some(&"this is a panic"));
 
-    let func = Function::new_native(&store, || panic!("this is another panic"));
+    let func = Function::new_typed(&mut store, || panic!("this is another panic"));
     let err = panic::catch_unwind(AssertUnwindSafe(|| {
         drop(Instance::new(
+            &mut store,
             &module,
             &imports! {
                 "" => {
@@ -358,26 +381,28 @@ fn rust_panic_start_function(config: crate::Config) -> Result<()> {
 
 #[compiler_test(traps)]
 fn mismatched_arguments(config: crate::Config) -> Result<()> {
-    let store = config.store();
+    let mut store = config.store();
     let binary = r#"
         (module $a
             (func (export "foo") (param i32))
         )
     "#;
 
-    let module = Module::new(&store, &binary)?;
-    let instance = Instance::new(&module, &imports! {})?;
+    let module = Module::new(&store, binary)?;
+    let instance = Instance::new(&mut store, &module, &imports! {})?;
     let func: &Function = instance.exports.get("foo")?;
     assert_eq!(
-        func.call(&[]).unwrap_err().message(),
+        func.call(&mut store, &[]).unwrap_err().message(),
         "Parameters of type [] did not match signature [I32] -> []"
     );
     assert_eq!(
-        func.call(&[Val::F32(0.0)]).unwrap_err().message(),
+        func.call(&mut store, &[Value::F32(0.0)])
+            .unwrap_err()
+            .message(),
         "Parameters of type [F32] did not match signature [I32] -> []",
     );
     assert_eq!(
-        func.call(&[Val::I32(0), Val::I32(1)])
+        func.call(&mut store, &[Value::I32(0), Value::I32(1)])
             .unwrap_err()
             .message(),
         "Parameters of type [I32, I32] did not match signature [I32] -> []"
@@ -388,7 +413,7 @@ fn mismatched_arguments(config: crate::Config) -> Result<()> {
 #[cfg_attr(target_env = "musl", ignore)]
 #[compiler_test(traps)]
 fn call_signature_mismatch(config: crate::Config) -> Result<()> {
-    let store = config.store();
+    let mut store = config.store();
     let binary = r#"
         (module $a
             (func $foo
@@ -402,10 +427,8 @@ fn call_signature_mismatch(config: crate::Config) -> Result<()> {
         )
     "#;
 
-    let module = Module::new(&store, &binary)?;
-    let err = Instance::new(&module, &imports! {})
-        .err()
-        .expect("expected error");
+    let module = Module::new(&store, binary)?;
+    let err = Instance::new(&mut store, &module, &imports! {}).expect_err("expected error");
     assert_eq!(
         format!("{}", err),
         "\
@@ -419,7 +442,7 @@ RuntimeError: indirect call type mismatch
 #[compiler_test(traps)]
 #[cfg_attr(target_env = "musl", ignore)]
 fn start_trap_pretty(config: crate::Config) -> Result<()> {
-    let store = config.store();
+    let mut store = config.store();
     let wat = r#"
         (module $m
             (func $die unreachable)
@@ -431,9 +454,7 @@ fn start_trap_pretty(config: crate::Config) -> Result<()> {
     "#;
 
     let module = Module::new(&store, wat)?;
-    let err = Instance::new(&module, &imports! {})
-        .err()
-        .expect("expected error");
+    let err = Instance::new(&mut store, &module, &imports! {}).expect_err("expected error");
 
     assert_eq!(
         format!("{}", err),
@@ -450,17 +471,17 @@ RuntimeError: unreachable
 
 #[compiler_test(traps)]
 fn present_after_module_drop(config: crate::Config) -> Result<()> {
-    let store = config.store();
+    let mut store = config.store();
     let module = Module::new(&store, r#"(func (export "foo") unreachable)"#)?;
-    let instance = Instance::new(&module, &imports! {})?;
+    let instance = Instance::new(&mut store, &module, &imports! {})?;
     let func: Function = instance.exports.get_function("foo")?.clone();
 
     println!("asserting before we drop modules");
-    assert_trap(func.call(&[]).unwrap_err());
+    assert_trap(func.call(&mut store, &[]).unwrap_err());
     drop((instance, module));
 
     println!("asserting after drop");
-    assert_trap(func.call(&[]).unwrap_err());
+    assert_trap(func.call(&mut store, &[]).unwrap_err());
     return Ok(());
 
     fn assert_trap(t: RuntimeError) {

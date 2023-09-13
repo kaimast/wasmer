@@ -21,9 +21,20 @@ pub const WASM_MIN_PAGES: u32 = 0x100;
 
 /// Units of WebAssembly pages (as specified to be 65,536 bytes).
 #[derive(
-    Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, RkyvSerialize, RkyvDeserialize, Archive,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    RkyvSerialize,
+    RkyvDeserialize,
+    Archive,
+    rkyv::CheckBytes,
 )]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+#[archive(as = "Self")]
 pub struct Pages(pub u32);
 
 impl Pages {
@@ -114,7 +125,7 @@ where
 }
 
 /// The only error that can happen when converting `Bytes` to `Pages`
-#[derive(Debug, Clone, Copy, PartialEq, Error)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 #[error("Number of pages exceeds uint32 range")]
 pub struct PageCountOutOfRange;
 

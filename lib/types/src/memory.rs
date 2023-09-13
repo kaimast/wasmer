@@ -7,8 +7,21 @@ use std::iter::Sum;
 use std::ops::{Add, AddAssign};
 
 /// Implementation styles for WebAssembly linear memory.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, RkyvSerialize, RkyvDeserialize, Archive)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    RkyvSerialize,
+    RkyvDeserialize,
+    Archive,
+    rkyv::CheckBytes,
+)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+#[archive(as = "Self")]
+#[repr(u8)]
 pub enum MemoryStyle {
     /// The actual memory can be resized and moved.
     Dynamic {
@@ -58,6 +71,8 @@ pub unsafe trait MemorySize: Copy {
         + PartialOrd<Self::Offset>
         + Clone
         + Copy
+        + Sync
+        + Send
         + ValueType
         + Into<u64>
         + From<u32>
@@ -67,15 +82,18 @@ pub unsafe trait MemorySize: Copy {
         + TryFrom<u32>
         + TryFrom<u16>
         + TryFrom<u8>
+        + TryFrom<i32>
         + TryInto<usize>
         + TryInto<u64>
         + TryInto<u32>
         + TryInto<u16>
         + TryInto<u8>
+        + TryInto<i32>
         + TryFrom<usize>
         + Add<Self::Offset>
         + Sum<Self::Offset>
-        + AddAssign<Self::Offset>;
+        + AddAssign<Self::Offset>
+        + 'static;
 
     /// Type used to pass this value as an argument or return value for a Wasm function.
     type Native: super::NativeWasmType;
@@ -83,11 +101,17 @@ pub unsafe trait MemorySize: Copy {
     /// Zero value used for `WasmPtr::is_null`.
     const ZERO: Self::Offset;
 
+    /// One value used for counting.
+    const ONE: Self::Offset;
+
     /// Convert an `Offset` to a `Native`.
     fn offset_to_native(offset: Self::Offset) -> Self::Native;
 
     /// Convert a `Native` to an `Offset`.
     fn native_to_offset(native: Self::Native) -> Self::Offset;
+
+    /// True if the memory is 64-bit
+    fn is_64bit() -> bool;
 }
 
 /// Marker trait for 32-bit memories.
@@ -97,11 +121,15 @@ unsafe impl MemorySize for Memory32 {
     type Offset = u32;
     type Native = i32;
     const ZERO: Self::Offset = 0;
+    const ONE: Self::Offset = 1;
     fn offset_to_native(offset: Self::Offset) -> Self::Native {
         offset as Self::Native
     }
     fn native_to_offset(native: Self::Native) -> Self::Offset {
         native as Self::Offset
+    }
+    fn is_64bit() -> bool {
+        false
     }
 }
 
@@ -112,10 +140,14 @@ unsafe impl MemorySize for Memory64 {
     type Offset = u64;
     type Native = i64;
     const ZERO: Self::Offset = 0;
+    const ONE: Self::Offset = 1;
     fn offset_to_native(offset: Self::Offset) -> Self::Native {
         offset as Self::Native
     }
     fn native_to_offset(native: Self::Native) -> Self::Offset {
         native as Self::Offset
+    }
+    fn is_64bit() -> bool {
+        true
     }
 }

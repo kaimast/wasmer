@@ -3,8 +3,8 @@
 
 use crate::compiler::SinglepassCompiler;
 use std::sync::Arc;
-use wasmer_compiler::{Compiler, CompilerConfig, CpuFeature, ModuleMiddleware, Target};
-use wasmer_types::Features;
+use wasmer_compiler::{Compiler, CompilerConfig, Engine, EngineBuilder, ModuleMiddleware};
+use wasmer_types::{CpuFeature, Features, Target};
 
 #[derive(Debug, Clone)]
 pub struct Singlepass {
@@ -21,10 +21,6 @@ impl Singlepass {
             enable_nan_canonicalization: true,
             middlewares: vec![],
         }
-    }
-
-    fn enable_nan_canonicalization(&mut self) {
-        self.enable_nan_canonicalization = true;
     }
 
     pub fn canonicalize_nans(&mut self, enable: bool) -> &mut Self {
@@ -60,5 +56,11 @@ impl CompilerConfig for Singlepass {
 impl Default for Singlepass {
     fn default() -> Singlepass {
         Self::new()
+    }
+}
+
+impl From<Singlepass> for Engine {
+    fn from(config: Singlepass) -> Self {
+        EngineBuilder::new(config).engine()
     }
 }

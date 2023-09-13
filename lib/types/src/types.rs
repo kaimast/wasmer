@@ -5,8 +5,8 @@ use crate::lib::std::format;
 use crate::lib::std::string::{String, ToString};
 use crate::lib::std::vec::Vec;
 use crate::units::Pages;
-use crate::values::{Value, WasmValueType};
 
+use bytecheck::CheckBytes;
 use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,9 @@ use serde::{Deserialize, Serialize};
 /// A list of all possible value types in WebAssembly.
 #[derive(Copy, Debug, Clone, Eq, PartialEq, Hash)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
-#[derive(RkyvSerialize, RkyvDeserialize, Archive)]
+#[derive(RkyvSerialize, RkyvDeserialize, Archive, rkyv::CheckBytes)]
+#[archive(as = "Self")]
+#[repr(u8)]
 pub enum Type {
     /// Signed 32 bit integer.
     I32,
@@ -58,10 +60,11 @@ impl fmt::Display for Type {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+/// The WebAssembly V128 type
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, CheckBytes)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 #[derive(RkyvSerialize, RkyvDeserialize, Archive)]
-/// The WebAssembly V128 type
+#[archive(as = "Self")]
 pub struct V128(pub(crate) [u8; 16]);
 
 impl V128 {
@@ -140,7 +143,11 @@ fn is_table_element_type_compatible(exported_type: Type, imported_type: Type) ->
     }
 }
 
-fn is_table_compatible(exported: &TableType, imported: &TableType) -> bool {
+fn is_table_compatible(
+    exported: &TableType,
+    imported: &TableType,
+    imported_runtime_size: Option<u32>,
+) -> bool {
     let TableType {
         ty: exported_ty,
         minimum: exported_minimum,
@@ -153,13 +160,17 @@ fn is_table_compatible(exported: &TableType, imported: &TableType) -> bool {
     } = imported;
 
     is_table_element_type_compatible(*exported_ty, *imported_ty)
-        && imported_minimum <= exported_minimum
+        && *imported_minimum <= imported_runtime_size.unwrap_or(*exported_minimum)
         && (imported_maximum.is_none()
             || (!exported_maximum.is_none()
                 && imported_maximum.unwrap() >= exported_maximum.unwrap()))
 }
 
-fn is_memory_compatible(exported: &MemoryType, imported: &MemoryType) -> bool {
+fn is_memory_compatible(
+    exported: &MemoryType,
+    imported: &MemoryType,
+    imported_runtime_size: Option<u32>,
+) -> bool {
     let MemoryType {
         minimum: exported_minimum,
         maximum: exported_maximum,
@@ -171,7 +182,7 @@ fn is_memory_compatible(exported: &MemoryType, imported: &MemoryType) -> bool {
         shared: imported_shared,
     } = imported;
 
-    imported_minimum <= exported_minimum
+    imported_minimum.0 <= imported_runtime_size.unwrap_or(exported_minimum.0)
         && (imported_maximum.is_none()
             || (!exported_maximum.is_none()
                 && imported_maximum.unwrap() >= exported_maximum.unwrap()))
@@ -210,12 +221,12 @@ impl ExternType {
         (Memory(MemoryType) memory unwrap_memory)
     }
     /// Check if two externs are compatible
-    pub fn is_compatible_with(&self, other: &Self) -> bool {
+    pub fn is_compatible_with(&self, other: &Self, runtime_size: Option<u32>) -> bool {
         match (self, other) {
             (Self::Function(a), Self::Function(b)) => a == b,
             (Self::Global(a), Self::Global(b)) => is_global_compatible(*a, *b),
-            (Self::Table(a), Self::Table(b)) => is_table_compatible(a, b),
-            (Self::Memory(a), Self::Memory(b)) => is_memory_compatible(a, b),
+            (Self::Table(a), Self::Table(b)) => is_table_compatible(a, b, runtime_size),
+            (Self::Memory(a), Self::Memory(b)) => is_memory_compatible(a, b, runtime_size),
             // The rest of possibilities, are not compatible
             _ => false,
         }
@@ -231,6 +242,7 @@ impl ExternType {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 #[derive(RkyvSerialize, RkyvDeserialize, Archive)]
+#[archive_attr(derive(CheckBytes))]
 pub struct FunctionType {
     /// The parameters of the function
     params: Box<[Type]>,
@@ -314,9 +326,11 @@ impl From<&Self> for FunctionType {
 }
 
 /// Indicator of whether a global is mutable or not
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, CheckBytes)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 #[derive(RkyvSerialize, RkyvDeserialize, Archive)]
+#[archive(as = "Self")]
+#[repr(u8)]
 pub enum Mutability {
     /// The global is constant and its value does not change
     Const,
@@ -351,9 +365,10 @@ impl From<Mutability> for bool {
 }
 
 /// WebAssembly global.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, CheckBytes)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 #[derive(RkyvSerialize, RkyvDeserialize, Archive)]
+#[archive(as = "Self")]
 pub struct GlobalType {
     /// The type of the value stored in the global.
     pub ty: Type,
@@ -372,7 +387,7 @@ impl GlobalType {
     /// Create a new Global variable
     /// # Usage:
     /// ```
-    /// use wasmer_types::{GlobalType, Type, Mutability, Value};
+    /// use wasmer_types::{GlobalType, Type, Mutability};
     ///
     /// // An I32 constant global
     /// let global = GlobalType::new(Type::I32, Mutability::Const);
@@ -397,7 +412,9 @@ impl fmt::Display for GlobalType {
 /// Globals are initialized via the `const` operators or by referring to another import.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
-#[derive(RkyvSerialize, RkyvDeserialize, Archive)]
+#[derive(RkyvSerialize, RkyvDeserialize, Archive, rkyv::CheckBytes)]
+#[archive(as = "Self")]
+#[repr(u8)]
 pub enum GlobalInit {
     /// An `i32.const`.
     I32Const(i32),
@@ -420,31 +437,6 @@ pub enum GlobalInit {
     RefFunc(FunctionIndex),
 }
 
-impl Eq for GlobalInit {}
-
-impl GlobalInit {
-    /// Get the `GlobalInit` from a given `Value`
-    pub fn from_value<T: WasmValueType>(value: Value<T>) -> Self {
-        match value {
-            Value::I32(i) => Self::I32Const(i),
-            Value::I64(i) => Self::I64Const(i),
-            Value::F32(f) => Self::F32Const(f),
-            Value::F64(f) => Self::F64Const(f),
-            _ => unimplemented!("GlobalInit from_value for {:?}", value),
-        }
-    }
-    /// Get the `Value` from the Global init value
-    pub fn to_value<T: WasmValueType>(&self) -> Value<T> {
-        match self {
-            Self::I32Const(i) => Value::I32(*i),
-            Self::I64Const(i) => Value::I64(*i),
-            Self::F32Const(f) => Value::F32(*f),
-            Self::F64Const(f) => Value::F64(*f),
-            _ => unimplemented!("GlobalInit to_value for {:?}", self),
-        }
-    }
-}
-
 // Table Types
 
 /// A descriptor for a table in a WebAssembly module.
@@ -455,6 +447,7 @@ impl GlobalInit {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 #[derive(RkyvSerialize, RkyvDeserialize, Archive)]
+#[archive_attr(derive(CheckBytes))]
 pub struct TableType {
     /// The type of data stored in elements of the table.
     pub ty: Type,
@@ -495,6 +488,7 @@ impl fmt::Display for TableType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 #[derive(RkyvSerialize, RkyvDeserialize, Archive)]
+#[archive_attr(derive(CheckBytes))]
 pub struct MemoryType {
     /// The minimum number of pages in the memory.
     pub minimum: Pages,

@@ -12,9 +12,10 @@ mod issues;
 mod metering;
 mod middlewares;
 // mod multi_value_imports;
-mod native_functions;
+mod artifact;
 mod serialize;
 mod traps;
+mod typed_functions;
 mod wasi;
 mod wast;
 

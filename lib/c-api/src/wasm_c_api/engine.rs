@@ -1,8 +1,6 @@
 #[cfg(feature = "compiler")]
 pub use super::unstable::engine::wasmer_is_compiler_available;
-pub use super::unstable::engine::{
-    wasm_config_set_features, wasm_config_set_target, wasmer_is_engine_available,
-};
+pub use super::unstable::engine::{wasm_config_set_features, wasm_config_set_target};
 use super::unstable::features::wasmer_features_t;
 #[cfg(feature = "middlewares")]
 pub use super::unstable::middlewares::wasm_config_push_middleware;
@@ -11,10 +9,10 @@ use super::unstable::middlewares::wasmer_middleware_t;
 use super::unstable::target_lexicon::wasmer_target_t;
 use crate::error::update_last_error;
 use cfg_if::cfg_if;
-use std::sync::Arc;
+#[cfg(not(any(feature = "compiler", feature = "compiler-headless")))]
 use wasmer_api::Engine;
-#[cfg(feature = "universal")]
-use wasmer_compiler::Universal;
+#[cfg(any(feature = "compiler", feature = "compiler-headless"))]
+use wasmer_compiler::{Engine, EngineBuilder};
 
 /// Kind of compilers that can be used by the engines.
 ///
@@ -69,13 +67,7 @@ pub enum wasmer_engine_t {
 
 impl Default for wasmer_engine_t {
     fn default() -> Self {
-        cfg_if! {
-            if #[cfg(feature = "universal")] {
-                Self::UNIVERSAL
-            } else {
-                compile_error!("Please enable one of the engines")
-            }
-        }
+        Self::UNIVERSAL
     }
 }
 
@@ -100,7 +92,7 @@ pub struct wasm_config_t {
 /// # Example
 ///
 /// ```rust
-/// # use inline_c::assert_c;
+/// # use wasmer_inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
 /// # #include "tests/wasmer.h"
@@ -128,7 +120,7 @@ pub struct wasm_config_t {
 /// cbindgen:ignore
 #[no_mangle]
 pub extern "C" fn wasm_config_new() -> Box<wasm_config_t> {
-    Box::new(wasm_config_t::default())
+    Box::<wasm_config_t>::default()
 }
 
 /// Delete a Wasmer config object.
@@ -139,7 +131,7 @@ pub extern "C" fn wasm_config_new() -> Box<wasm_config_t> {
 /// # Example
 ///
 /// ```rust
-/// # use inline_c::assert_c;
+/// # use wasmer_inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
 /// # #include "tests/wasmer.h"
@@ -168,7 +160,7 @@ pub extern "C" fn wasm_config_delete(_config: Option<Box<wasm_config_t>>) {}
 /// # Example
 ///
 /// ```rust
-/// # use inline_c::assert_c;
+/// # use wasmer_inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
 /// # #include "tests/wasmer.h"
@@ -222,7 +214,7 @@ pub extern "C" fn wasm_config_set_compiler(
 /// # Example
 ///
 /// ```rust
-/// # use inline_c::assert_c;
+/// # use wasmer_inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
 /// # #include "tests/wasmer.h"
@@ -230,12 +222,6 @@ pub extern "C" fn wasm_config_set_compiler(
 /// int main() {
 ///     // Create the configuration.
 ///     wasm_config_t* config = wasm_config_new();
-///
-///     // Use the Universal engine, if available.
-///     if (wasmer_is_engine_available(UNIVERSAL)) {
-///         wasm_config_set_engine(config, UNIVERSAL);
-///     }
-///     // OK, let's do not specify any particular engine.
 ///
 ///     // Create the engine.
 ///     wasm_engine_t* engine = wasm_engine_new_with_config(config);
@@ -263,21 +249,21 @@ pub extern "C" fn wasm_config_set_engine(config: &mut wasm_config_t, engine: was
 /// cbindgen:ignore
 #[repr(C)]
 pub struct wasm_engine_t {
-    pub(crate) inner: Arc<dyn Engine + Send + Sync>,
+    pub(crate) inner: Engine,
 }
 
 #[cfg(feature = "compiler")]
 use wasmer_api::CompilerConfig;
 
-#[cfg(all(feature = "compiler", any(feature = "universal", feature = "dylib")))]
+#[cfg(all(feature = "compiler", any(feature = "compiler", feature = "dylib")))]
 fn get_default_compiler_config() -> Box<dyn CompilerConfig> {
     cfg_if! {
         if #[cfg(feature = "cranelift")] {
-            Box::new(wasmer_compiler_cranelift::Cranelift::default())
+            Box::<wasmer_compiler_cranelift::Cranelift>::default()
         } else if #[cfg(feature = "llvm")] {
-            Box::new(wasmer_compiler_llvm::LLVM::default())
+            Box::<wasmer_compiler_llvm::LLVM>::default()
         } else if #[cfg(feature = "singlepass")] {
-            Box::new(wasmer_compiler_singlepass::Singlepass::default())
+            Box::<wasmer_compiler_singlepass::Singlepass>::default()
         } else {
             compile_error!("Please enable one of the compiler backends")
         }
@@ -285,7 +271,7 @@ fn get_default_compiler_config() -> Box<dyn CompilerConfig> {
 }
 
 cfg_if! {
-    if #[cfg(all(feature = "universal", feature = "compiler"))] {
+    if #[cfg(feature = "compiler")] {
         /// Creates a new Universal engine with the default compiler.
         ///
         /// # Example
@@ -296,10 +282,10 @@ cfg_if! {
         #[no_mangle]
         pub extern "C" fn wasm_engine_new() -> Box<wasm_engine_t> {
             let compiler_config: Box<dyn CompilerConfig> = get_default_compiler_config();
-            let engine: Arc<dyn Engine + Send + Sync> = Arc::new(Universal::new(compiler_config).engine());
+            let engine: Engine = EngineBuilder::new(compiler_config).engine();
             Box::new(wasm_engine_t { inner: engine })
         }
-    } else if #[cfg(feature = "universal")] {
+    } else if #[cfg(feature = "compiler-headless")] {
         /// Creates a new headless Universal engine.
         ///
         /// # Example
@@ -309,7 +295,20 @@ cfg_if! {
         /// cbindgen:ignore
         #[no_mangle]
         pub extern "C" fn wasm_engine_new() -> Box<wasm_engine_t> {
-            let engine: Arc<dyn Engine + Send + Sync> = Arc::new(Universal::headless().engine());
+            let engine: Engine = EngineBuilder::headless().engine();
+            Box::new(wasm_engine_t { inner: engine })
+        }
+    } else if #[cfg(feature = "jsc")] {
+        /// Creates the JavascriptCore Engine.
+        ///
+        /// # Example
+        ///
+        /// See [`wasm_engine_delete`].
+        ///
+        /// cbindgen:ignore
+        #[no_mangle]
+        pub extern "C" fn wasm_engine_new() -> Box<wasm_engine_t> {
+            let engine: Engine = Engine::default();
             Box::new(wasm_engine_t { inner: engine })
         }
     } else {
@@ -322,7 +321,7 @@ cfg_if! {
         /// cbindgen:ignore
         #[no_mangle]
         pub extern "C" fn wasm_engine_new() -> Box<wasm_engine_t> {
-            unimplemented!("No engine attached; You might want to recompile `wasmer_c_api` with for example `--feature universal`");
+            unimplemented!("No engine attached; You might want to recompile `wasmer_c_api` with for example `--feature compiler`");
         }
     }
 }
@@ -332,7 +331,7 @@ cfg_if! {
 /// # Example
 ///
 /// ```rust
-/// # use inline_c::assert_c;
+/// # use wasmer_inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
 /// # #include "tests/wasmer.h"
@@ -375,8 +374,10 @@ pub extern "C" fn wasm_engine_new_with_config(
         None
     }
 
+    #[allow(unused)]
     let config = config?;
-
+    #[cfg(not(any(feature = "compiler", feature = "compiler-headless")))]
+    return return_with_error("Wasmer has not been compiled with the `compiler` feature.");
     cfg_if! {
         if #[cfg(feature = "compiler")] {
             #[allow(unused_mut)]
@@ -384,7 +385,7 @@ pub extern "C" fn wasm_engine_new_with_config(
                 wasmer_compiler_t::CRANELIFT => {
                     cfg_if! {
                         if #[cfg(feature = "cranelift")] {
-                            Box::new(wasmer_compiler_cranelift::Cranelift::default())
+                            Box::<wasmer_compiler_cranelift::Cranelift>::default()
                         } else {
                             return return_with_error("Wasmer has not been compiled with the `cranelift` feature.");
                         }
@@ -393,7 +394,7 @@ pub extern "C" fn wasm_engine_new_with_config(
                 wasmer_compiler_t::LLVM => {
                     cfg_if! {
                         if #[cfg(feature = "llvm")] {
-                            Box::new(wasmer_compiler_llvm::LLVM::default())
+                            Box::<wasmer_compiler_llvm::LLVM>::default()
                         } else {
                             return return_with_error("Wasmer has not been compiled with the `llvm` feature.");
                         }
@@ -402,7 +403,7 @@ pub extern "C" fn wasm_engine_new_with_config(
                 wasmer_compiler_t::SINGLEPASS => {
                     cfg_if! {
                         if #[cfg(feature = "singlepass")] {
-                            Box::new(wasmer_compiler_singlepass::Singlepass::default())
+                            Box::<wasmer_compiler_singlepass::Singlepass>::default()
                         } else {
                             return return_with_error("Wasmer has not been compiled with the `singlepass` feature.");
                         }
@@ -419,50 +420,40 @@ pub extern "C" fn wasm_engine_new_with_config(
                 compiler_config.canonicalize_nans(true);
             }
 
-            let inner: Arc<dyn Engine + Send + Sync> = match config.engine {
-                wasmer_engine_t::UNIVERSAL => {
-                    cfg_if! {
-                        if #[cfg(feature = "universal")] {
-                            let mut builder = Universal::new(compiler_config);
+            let inner: Engine =
+                         {
+                            let mut builder = EngineBuilder::new(compiler_config);
 
                             if let Some(target) = config.target {
-                                builder = builder.target(target.inner);
+                                builder = builder.set_target(Some(target.inner));
                             }
 
                             if let Some(features) = config.features {
-                                builder = builder.features(features.inner);
+                                builder = builder.set_features(Some(features.inner));
                             }
 
-                            Arc::new(builder.engine())
-                        } else {
-                            return return_with_error("Wasmer has not been compiled with the `universal` feature.");
-                        }
-                    }
-                },
-            };
+                            builder.engine()
+                        };
             Some(Box::new(wasm_engine_t { inner }))
         } else {
-            let inner: Arc<dyn Engine + Send + Sync> = match config.engine {
-                wasmer_engine_t::UNIVERSAL => {
-                    cfg_if! {
-                        if #[cfg(feature = "universal")] {
-                            let mut builder = Universal::headless();
+            #[cfg(feature = "compiler-headless")]
+            let inner: Engine =
+                     {
+                            let mut builder = EngineBuilder::headless();
 
                             if let Some(target) = config.target {
-                                builder = builder.target(target.inner);
+                                builder = builder.set_target(Some(target.inner));
                             }
 
                             if let Some(features) = config.features {
-                                builder = builder.features(features.inner);
+                                builder = builder.set_features(Some(features.inner));
                             }
 
-                            Arc::new(builder.engine())
-                        } else {
-                            return return_with_error("Wasmer has not been compiled with the `universal` feature.");
-                        }
-                    }
-                },
-            };
+                            builder.engine()
+                    };
+            #[cfg(not(any(feature = "compiler-headless", feature="compiler")))]
+            let inner: Engine = Engine::default();
+
             Some(Box::new(wasm_engine_t { inner }))
         }
     }
@@ -470,8 +461,12 @@ pub extern "C" fn wasm_engine_new_with_config(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(not(target_os = "windows"))]
     use inline_c::assert_c;
+    #[cfg(target_os = "windows")]
+    use wasmer_inline_c::assert_c;
 
+    #[cfg_attr(coverage, ignore)]
     #[test]
     fn test_engine_new() {
         (assert_c! {

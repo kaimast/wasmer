@@ -1,10 +1,11 @@
 //! Unstable non-standard Wasmer-specific extensions to the Wasm C API.
 
+use super::super::engine::wasm_engine_t;
 use super::super::module::wasm_module_t;
-use super::super::types::wasm_name_t;
+use super::super::types::{wasm_byte_vec_t, wasm_name_t};
 use std::ptr;
 use std::str;
-use std::sync::Arc;
+use wasmer_api::Module;
 
 /// Unstable non-standard Wasmer-specific API to get the module's
 /// name, otherwise `out->size` is set to `0` and `out->data` to
@@ -13,7 +14,7 @@ use std::sync::Arc;
 /// # Example
 ///
 /// ```rust
-/// # use inline_c::assert_c;
+/// # use wasmer_inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
 /// # #include "tests/wasmer.h"
@@ -80,7 +81,7 @@ pub unsafe extern "C" fn wasmer_module_name(
 /// # Example
 ///
 /// ```rust
-/// # use inline_c::assert_c;
+/// # use wasmer_inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
 /// # #include "tests/wasmer.h"
@@ -149,8 +150,32 @@ pub unsafe extern "C" fn wasmer_module_set_name(
         Err(_) => return false, // not ideal!
     };
 
-    match Arc::get_mut(&mut module.inner) {
-        Some(module) => module.set_name(name),
-        None => false,
-    }
+    module.inner.set_name(name)
+}
+
+/// A WebAssembly module contains stateless WebAssembly code that has
+/// already been compiled and can be instantiated multiple times.
+///
+/// Creates a new WebAssembly Module using the provided engine,
+/// respecting its configuration.
+///
+/// ## Security
+///
+/// Before the code is compiled, it will be validated using the engine
+/// features.
+///
+/// # Example
+///
+/// See the module's documentation.
+#[no_mangle]
+pub unsafe extern "C" fn wasmer_module_new(
+    engine: Option<&mut wasm_engine_t>,
+    bytes: Option<&wasm_byte_vec_t>,
+) -> Option<Box<wasm_module_t>> {
+    let engine: wasmer_api::Engine = engine?.inner.clone().into();
+    let bytes = bytes?;
+
+    let module = c_try!(Module::from_binary(&engine, bytes.as_slice()));
+
+    Some(Box::new(wasm_module_t { inner: module }))
 }

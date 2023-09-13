@@ -5,12 +5,12 @@ use crate::location::CombinedRegister;
 use crate::location::Reg as AbstractReg;
 use std::collections::BTreeMap;
 use std::slice::Iter;
-use wasmer_compiler::CallingConvention;
-use wasmer_types::Type;
+use wasmer_types::{CallingConvention, Type};
 
 /// General-purpose registers.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum GPR {
     X0 = 0,
     X1 = 1,
@@ -50,6 +50,7 @@ pub enum GPR {
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[allow(dead_code)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum NEON {
     V0 = 0,
     V1 = 1,

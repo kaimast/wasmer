@@ -1,15 +1,18 @@
-use wasmer::{Engine, Memory32, imports, wat2wasm, WasmerEnv, WasmPtr, Function, Instance, Module, Store, LazyInit, Memory};
-use wasmer_compiler_llvm::LLVM;
+use wasmer::{
+    imports, wat2wasm, Engine, Function, Instance, LazyInit, Memory, Memory32, Module, Store,
+    WasmPtr, WasmerEnv,
+};
 use wasmer_compiler::Universal;
+use wasmer_compiler_llvm::LLVM;
 
 use std::convert::TryInto;
 use std::time::Instant;
 
 #[derive(Clone, Debug, WasmerEnv)]
 struct FnEnv {
-    #[ wasmer(export) ]
+    #[wasmer(export)]
     memory: LazyInit<Memory>,
-    number: i32
+    number: i32,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -82,17 +85,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     fn log_fn(env: &FnEnv, ptr: WasmPtr<u8, Memory32>, len: i32) {
         let memory = env.memory.get_ref().expect("Memory not initialized");
-        let log_msg = ptr.read_utf8_string(memory, len as u32)
+        let log_msg = ptr
+            .read_utf8_string(memory, len as u32)
             .expect("Pointer out of bounds");
 
         println!("Program said: {}", log_msg);
     }
 
     // Create an import object.
-    let env1 = FnEnv{ number: 2, memory: Default::default() };
+    let env1 = FnEnv {
+        number: 2,
+        memory: Default::default(),
+    };
     let host_function1 = Function::new_native_with_env(&store, env1.clone(), host_fn);
     let log_function1 = Function::new_native_with_env(&store, env1, log_fn);
-    let import_object1 = imports!{
+    let import_object1 = imports! {
         "" => {
             "host_function" => host_function1,
             "log" => log_function1,
@@ -107,25 +114,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let instance1 = Instance::new(&module, &import_object1)?;
 
     let end = Instant::now();
-    println!("Took {}us", (end-start).as_micros());
+    println!("Took {}us", (end - start).as_micros());
 
     println!("Cloning instance");
     let start = Instant::now();
 
-    let env2 = FnEnv{ number: 42, memory: Default::default() };
+    let env2 = FnEnv {
+        number: 42,
+        memory: Default::default(),
+    };
     let host_function2 = Function::new_native_with_env(&store, env2.clone(), host_fn);
     let log_function2 = Function::new_native_with_env(&store, env2, log_fn);
- 
-    let import_object2 = imports!{
+
+    let import_object2 = imports! {
         "" => {
             "host_function" => host_function2,
             "log" => log_function2,
         },
     };
 
-    let instance2 = unsafe{ instance1.duplicate(&import_object2).expect("Duplication failed") };
+    let instance2 = unsafe {
+        instance1
+            .duplicate(&import_object2)
+            .expect("Duplication failed")
+    };
     let end = Instant::now();
-    println!("Took {}us", (end-start).as_micros());
+    println!("Took {}us", (end - start).as_micros());
 
     let func1 = instance1.exports.get_function("my_func").unwrap();
     let func2 = instance2.exports.get_function("my_func").unwrap();

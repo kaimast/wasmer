@@ -6,9 +6,10 @@ use serde::{Deserialize, Serialize};
 /// Features usually have a corresponding [WebAssembly proposal].
 ///
 /// [WebAssembly proposal]: https://github.com/WebAssembly/proposals
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, rkyv::CheckBytes)]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 #[derive(RkyvSerialize, RkyvDeserialize, Archive)]
+#[archive(as = "Self")]
 pub struct Features {
     /// Threads proposal should be enabled
     pub threads: bool,
@@ -40,7 +41,7 @@ impl Features {
     /// Create a new feature
     pub fn new() -> Self {
         Self {
-            threads: false,
+            threads: true,
             // Reference types should be on by default
             reference_types: true,
             // SIMD should be on by default
@@ -248,7 +249,7 @@ mod test_features {
         assert_eq!(
             default,
             Features {
-                threads: false,
+                threads: true,
                 reference_types: true,
                 simd: true,
                 bulk_memory: true,

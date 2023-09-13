@@ -1,32 +1,35 @@
-use crate::store::{EngineType, StoreOptions};
+use crate::store::StoreOptions;
 use crate::warning;
 use anyhow::{Context, Result};
+use clap::Parser;
+use std::fs;
 use std::path::{Path, PathBuf};
-use structopt::StructOpt;
-use wasmer_compiler::{ArtifactCreate, UniversalArtifactBuild};
-use wasmer_compiler::{CpuFeature, ModuleEnvironment, Target, Triple};
+use wasmer_compiler::{ArtifactBuild, ArtifactCreate, ModuleEnvironment};
 use wasmer_types::entity::PrimaryMap;
-use wasmer_types::{CompileError, MemoryIndex, MemoryStyle, TableIndex, TableStyle};
+use wasmer_types::{
+    Architecture, CompileError, CpuFeature, MemoryIndex, MemoryStyle, TableIndex, TableStyle,
+    Target, Triple,
+};
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 /// The options for the `wasmer compile` subcommand
 pub struct Compile {
     /// Input file
-    #[structopt(name = "FILE", parse(from_os_str))]
+    #[clap(name = "FILE")]
     path: PathBuf,
 
     /// Output file
-    #[structopt(name = "OUTPUT PATH", short = "o", parse(from_os_str))]
+    #[clap(name = "OUTPUT PATH", short = 'o')]
     output: PathBuf,
 
     /// Compilation Target triple
-    #[structopt(long = "target")]
+    #[clap(long = "target")]
     target_triple: Option<Triple>,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     store: StoreOptions,
 
-    #[structopt(short = "m", multiple = true, number_of_values = 1)]
+    #[clap(short = 'm')]
     cpu_features: Vec<CpuFeature>,
 }
 
@@ -35,17 +38,6 @@ impl Compile {
     pub fn execute(&self) -> Result<()> {
         self.inner_execute()
             .context(format!("failed to compile `{}`", self.path.display()))
-    }
-
-    pub(crate) fn get_recommend_extension(
-        engine_type: &EngineType,
-        target_triple: &Triple,
-    ) -> Result<&'static str> {
-        Ok(match engine_type {
-            EngineType::Universal => {
-                wasmer_compiler::UniversalArtifactBuild::get_default_extension(target_triple)
-            }
-        })
     }
 
     fn inner_execute(&self) -> Result<()> {
@@ -60,18 +52,22 @@ impl Compile {
                     .fold(CpuFeature::set(), |a, b| a | b);
                 // Cranelift requires SSE2, so we have this "hack" for now to facilitate
                 // usage
-                features |= CpuFeature::SSE2;
+                if target_triple.architecture == Architecture::X86_64 {
+                    features |= CpuFeature::SSE2;
+                }
                 Target::new(target_triple.clone(), features)
             })
             .unwrap_or_default();
-        let (mut engine, engine_type, compiler_type) =
-            self.store.get_engine_for_target(target.clone())?;
+        let (engine_builder, compiler_type) = self.store.get_engine_for_target(target.clone())?;
+        let engine = engine_builder.engine();
         let output_filename = self
             .output
             .file_stem()
             .map(|osstr| osstr.to_string_lossy().to_string())
             .unwrap_or_default();
-        let recommended_extension = Self::get_recommend_extension(&engine_type, target.triple())?;
+        // `.wasmu` is the default extension for all the triples. It
+        // stands for “Wasm Universal”.
+        let recommended_extension = "wasmu";
         match self.output.extension() {
             Some(ext) => {
                 if ext != recommended_extension {
@@ -84,7 +80,6 @@ impl Compile {
         }
         let tunables = self.store.get_tunables_for_target(&target)?;
 
-        println!("Engine: {}", engine_type.to_string());
         println!("Compiler: {}", compiler_type.to_string());
         println!("Target: {}", target.triple());
 
@@ -104,14 +99,15 @@ impl Compile {
             .values()
             .map(|table_type| tunables.table_style(table_type))
             .collect();
-        let artifact = UniversalArtifactBuild::new(
-            &mut engine,
+        let artifact = ArtifactBuild::new(
+            &mut engine.inner_mut(),
             &wasm_bytes,
             &target,
             memory_styles,
             table_styles,
         )?;
-        artifact.serialize_to_file(self.output.as_ref())?;
+        let serialized = artifact.serialize()?;
+        fs::write(output_filename, serialized)?;
         eprintln!(
             "✔ File compiled successfully to `{}`.",
             self.output.display(),

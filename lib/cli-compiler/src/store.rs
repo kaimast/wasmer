@@ -3,13 +3,13 @@
 
 use crate::common::WasmFeatures;
 use anyhow::Result;
+use clap::Parser;
 use std::string::ToString;
 #[allow(unused_imports)]
 use std::sync::Arc;
-use structopt::StructOpt;
-use wasmer_compiler::UniversalEngineBuilder;
-use wasmer_compiler::{CompilerConfig, Features, PointerWidth, Target};
-use wasmer_types::{MemoryStyle, MemoryType, Pages, TableStyle, TableType};
+use wasmer_compiler::EngineBuilder;
+use wasmer_compiler::{CompilerConfig, Features};
+use wasmer_types::{MemoryStyle, MemoryType, Pages, PointerWidth, TableStyle, TableType, Target};
 
 /// Minimul Subset of Tunable parameters for WebAssembly compilation.
 #[derive(Clone)]
@@ -84,41 +84,41 @@ impl SubsetTunables {
     }
 }
 
-#[derive(Debug, Clone, StructOpt, Default)]
+#[derive(Debug, Clone, Parser, Default)]
 /// The compiler and engine options
 pub struct StoreOptions {
-    #[structopt(flatten)]
+    #[clap(flatten)]
     compiler: CompilerOptions,
 }
 
-#[derive(Debug, Clone, StructOpt, Default)]
+#[derive(Debug, Clone, Parser, Default)]
 /// The compiler options
 pub struct CompilerOptions {
     /// Use Singlepass compiler.
-    #[structopt(long, conflicts_with_all = &["cranelift", "llvm"])]
+    #[clap(long, conflicts_with_all = &["cranelift", "llvm"])]
     singlepass: bool,
 
     /// Use Cranelift compiler.
-    #[structopt(long, conflicts_with_all = &["singlepass", "llvm"])]
+    #[clap(long, conflicts_with_all = &["singlepass", "llvm"])]
     cranelift: bool,
 
     /// Use LLVM compiler.
-    #[structopt(long, conflicts_with_all = &["singlepass", "cranelift"])]
+    #[clap(long, conflicts_with_all = &["singlepass", "cranelift"])]
     llvm: bool,
 
     /// Enable compiler internal verification.
     #[allow(unused)]
-    #[structopt(long)]
+    #[clap(long)]
     #[allow(dead_code)]
     enable_verifier: bool,
 
     /// LLVM debug directory, where IR and object files will be written to.
     #[allow(unused)]
     #[cfg(feature = "llvm")]
-    #[cfg_attr(feature = "llvm", structopt(long, parse(from_os_str)))]
+    #[cfg_attr(feature = "llvm", clap(long, parse(from_os_str)))]
     llvm_debug_dir: Option<PathBuf>,
 
-    #[structopt(flatten)]
+    #[clap(flatten)]
     features: WasmFeatures,
 }
 
@@ -136,7 +136,7 @@ impl CompilerOptions {
                 if #[cfg(all(feature = "cranelift", any(target_arch = "x86_64", target_arch = "aarch64")))] {
                     Ok(CompilerType::Cranelift)
                 }
-                else if #[cfg(all(feature = "singlepass", target_arch = "x86_64"))] {
+                else if #[cfg(all(feature = "singlepass", any(target_arch = "x86_64", target_arch = "aarch64")))] {
                     Ok(CompilerType::Singlepass)
                 }
                 else if #[cfg(feature = "llvm")] {
@@ -172,14 +172,11 @@ impl CompilerOptions {
         &self,
         target: Target,
         compiler_config: Box<dyn CompilerConfig>,
-        engine_type: EngineType,
-    ) -> Result<UniversalEngineBuilder> {
+    ) -> Result<EngineBuilder> {
         let features = self.get_features(compiler_config.default_features_for_target(&target))?;
-        let engine: UniversalEngineBuilder = match engine_type {
-            EngineType::Universal => {
-                UniversalEngineBuilder::new(Some(compiler_config.compiler()), features)
-            }
-        };
+        let engine: EngineBuilder = EngineBuilder::new(compiler_config)
+            .set_target(Some(target))
+            .set_features(Some(features));
 
         Ok(engine)
     }
@@ -361,48 +358,20 @@ impl ToString for CompilerType {
     }
 }
 
-/// The engine used for the store
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum EngineType {
-    /// Universal Engine
-    Universal,
-}
-
-impl ToString for EngineType {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Universal => "universal".to_string(),
-        }
-    }
-}
-
 impl StoreOptions {
-    /// Get a UniversalEngineBulder for the Target
-    pub fn get_engine_for_target(
-        &self,
-        target: Target,
-    ) -> Result<(UniversalEngineBuilder, EngineType, CompilerType)> {
+    /// Get a EngineBulder for the Target
+    pub fn get_engine_for_target(&self, target: Target) -> Result<(EngineBuilder, CompilerType)> {
         let (compiler_config, compiler_type) = self.compiler.get_compiler_config()?;
-        let (engine, engine_type) = self.get_engine_with_compiler(target, compiler_config)?;
-        Ok((engine, engine_type, compiler_type))
-    }
-
-    /// Get default EngineType
-    pub fn get_engine(&self) -> Result<EngineType> {
-        Ok(EngineType::Universal)
+        let engine = self.get_engine_with_compiler(target, compiler_config)?;
+        Ok((engine, compiler_type))
     }
 
     fn get_engine_with_compiler(
         &self,
         target: Target,
         compiler_config: Box<dyn CompilerConfig>,
-    ) -> Result<(UniversalEngineBuilder, EngineType)> {
-        let engine_type = self.get_engine()?;
-        let engine = self
-            .compiler
-            .get_engine_by_type(target, compiler_config, engine_type)?;
-
-        Ok((engine, engine_type))
+    ) -> Result<EngineBuilder> {
+        self.compiler.get_engine_by_type(target, compiler_config)
     }
 
     /// Get (Subset)Tunables for the Target

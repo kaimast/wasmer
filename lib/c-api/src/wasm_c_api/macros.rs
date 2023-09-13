@@ -17,7 +17,7 @@ Read the documentation of [`", $c_ty, "`] to see more concrete examples.
 # Example
 
 ```rust
-# use inline_c::assert_c;
+# use wasmer_inline_c::assert_c;
 # fn main() {
 #    (assert_c! {
 # #include \"tests/wasmer.h\"
@@ -120,7 +120,7 @@ void example(", $c_ty, " x, ", $c_ty, " y) {
 # Example
 
 ```rust
-# use inline_c::assert_c;
+# use wasmer_inline_c::assert_c;
 # fn main() {
 #    (assert_c! {
 # #include \"tests/wasmer.h\"
@@ -153,7 +153,7 @@ int main() {
 # Example
 
 ```rust
-# use inline_c::assert_c;
+# use wasmer_inline_c::assert_c;
 # fn main() {
 #    (assert_c! {
 # #include \"tests/wasmer.h\"
@@ -297,6 +297,16 @@ macro_rules! wasm_impl_copy_delete {
 }
 
 macro_rules! c_try {
+    ($expr:expr; otherwise ()) => {{
+        let res: Result<_, _> = $expr;
+        match res {
+            Ok(val) => val,
+            Err(err) => {
+                crate::error::update_last_error(err);
+                return;
+            }
+        }
+    }};
     ($expr:expr; otherwise $return:expr) => {{
         let res: Result<_, _> = $expr;
         match res {

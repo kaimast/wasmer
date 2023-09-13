@@ -1,7 +1,7 @@
 //! This build script aims at:
 //!
 //! * generating the C header files for the C API,
-//! * setting `inline-c` up.
+//! * setting `wasmer-inline-c` up.
 
 use cbindgen::{Builder, Language};
 use std::{
@@ -52,18 +52,23 @@ const MIDDLEWARES_FEATURE_AS_C_DEFINE: &str = "WASMER_MIDDLEWARES_ENABLED";
 #[allow(unused)]
 const EMSCRIPTEN_FEATURE_AS_C_DEFINE: &str = "WASMER_EMSCRIPTEN_ENABLED";
 
+#[allow(unused)]
+const JSC_FEATURE_AS_C_DEFINE: &str = "WASMER_JSC_BACKEND";
+
 macro_rules! map_feature_as_c_define {
     ($feature:expr, $c_define:ident, $accumulator:ident) => {
         #[cfg(feature = $feature)]
         {
-            $accumulator.push_str(&format!(
+            use std::fmt::Write;
+            let _ = write!(
+                $accumulator,
                 r#"
 // The `{feature}` feature has been enabled for this build.
 #define {define}
 "#,
                 feature = $feature,
                 define = $c_define,
-            ));
+            );
         }
     };
 }
@@ -81,7 +86,7 @@ fn main() {
     build_cdylib_link_arg();
 }
 
-/// Check whether we should build the C API headers or set `inline-c` up.
+/// Check whether we should build the C API headers or set `wasmer-inline-c` up.
 fn running_self() -> bool {
     env::var("DOCS_RS").is_err()
         && env::var("_CBINDGEN_IS_RUNNING").is_err()
@@ -140,7 +145,8 @@ fn build_wasm_c_api_headers(crate_dir: &str, out_dir: &str) {
         pre_header = PRE_HEADER
     );
 
-    map_feature_as_c_define!("universal", UNIVERSAL_FEATURE_AS_C_DEFINE, pre_header);
+    map_feature_as_c_define!("jsc", JSC_FEATURE_AS_C_DEFINE, pre_header);
+    map_feature_as_c_define!("compiler", UNIVERSAL_FEATURE_AS_C_DEFINE, pre_header);
     map_feature_as_c_define!("compiler", COMPILER_FEATURE_AS_C_DEFINE, pre_header);
     map_feature_as_c_define!("wasi", WASI_FEATURE_AS_C_DEFINE, pre_header);
     map_feature_as_c_define!("middlewares", MIDDLEWARES_FEATURE_AS_C_DEFINE, pre_header);
@@ -184,7 +190,9 @@ fn build_wasm_c_api_headers(crate_dir: &str, out_dir: &str) {
 }
 
 fn add_wasmer_version(pre_header: &mut String) {
-    pre_header.push_str(&format!(
+    use std::fmt::Write;
+    let _ = write!(
+        pre_header,
         r#"
 // This file corresponds to the following Wasmer version.
 #define WASMER_VERSION "{full}"
@@ -198,7 +206,7 @@ fn add_wasmer_version(pre_header: &mut String) {
         minor = env!("CARGO_PKG_VERSION_MINOR"),
         patch = env!("CARGO_PKG_VERSION_PATCH"),
         pre = env!("CARGO_PKG_VERSION_PRE"),
-    ));
+    );
 }
 
 /// Create a fresh new `Builder`, already pre-configured.
@@ -343,7 +351,11 @@ fn shared_object_dir() -> PathBuf {
     // We either find `target` or the target triple if cross-compiling.
     if shared_object_dir.file_name() != Some(OsStr::new("target")) {
         let target = env::var("TARGET").unwrap();
-        assert_eq!(shared_object_dir.file_name(), Some(OsStr::new(&target)));
+        if shared_object_dir.file_name() != Some(OsStr::new("llvm-cov-target")) {
+            assert_eq!(shared_object_dir.file_name(), Some(OsStr::new(&target)));
+        } else {
+            shared_object_dir.set_file_name(&target);
+        }
     }
 
     shared_object_dir.push(env::var("PROFILE").unwrap());

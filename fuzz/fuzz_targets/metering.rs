@@ -5,7 +5,6 @@ use std::sync::Arc;
 use wasm_smith::{Config, ConfiguredModule};
 use wasmer::wasmparser::Operator;
 use wasmer::{imports, CompilerConfig, Instance, Module, Store};
-use wasmer_compiler::Universal;
 use wasmer_compiler_cranelift::Cranelift;
 use wasmer_middlewares::Metering;
 
@@ -56,9 +55,9 @@ fuzz_target!(|module: WasmSmithModule| {
     compiler.enable_verifier();
     let metering = Arc::new(Metering::new(10, cost));
     compiler.push_middleware(metering);
-    let store = Store::new_with_engine(&Universal::new(compiler).engine());
+    let mut store = Store::new(compiler);
     let module = Module::new(&store, &wasm_bytes).unwrap();
-    match Instance::new(&module, &imports! {}) {
+    match Instance::new(&mut store, &module, &imports! {}) {
         Ok(_) => {}
         Err(e) => {
             let error_message = format!("{}", e);

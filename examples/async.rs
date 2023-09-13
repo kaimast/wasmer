@@ -1,6 +1,6 @@
 use wasmer::{imports, wat2wasm, Function, Instance, LazyInit, Module, Store, WasmerEnv, Yielder};
-use wasmer_compiler_cranelift::Cranelift;
 use wasmer_compiler::Universal;
+use wasmer_compiler_cranelift::Cranelift;
 
 use async_wormhole::stack::{EightMbStack, Stack};
 

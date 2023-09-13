@@ -17,9 +17,10 @@
 //!
 //! Ready?
 
-use wasmer::{imports, wat2wasm, Function, FunctionType, Instance, Module, Store, Type, Value};
-use wasmer_compiler::Universal;
-use wasmer_compiler_cranelift::Cranelift;
+use wasmer::{
+    imports, wat2wasm, Function, FunctionEnv, FunctionEnvMut, FunctionType, Instance, Module,
+    Store, Type, TypedFunction, Value,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Let's declare the Wasm module with the text representation.
@@ -27,22 +28,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         br#"
 (module
   (func $multiply_dynamic (import "env" "multiply_dynamic") (param i32) (result i32))
-  (func $multiply_native (import "env" "multiply_native") (param i32) (result i32))
+  (func $multiply_typed (import "env" "multiply_typed") (param i32) (result i32))
 
   (type $sum_t (func (param i32) (param i32) (result i32)))
   (func $sum_f (type $sum_t) (param $x i32) (param $y i32) (result i32)
     (call $multiply_dynamic (local.get $x))
-    (call $multiply_native (local.get $y))
+    (call $multiply_typed (local.get $y))
     i32.add)
   (export "sum" (func $sum_f)))
 "#,
     )?;
 
     // Create a Store.
-    // Note that we don't need to specify the engine/compiler if we want to use
-    // the default provided by Wasmer.
-    // You can use `Store::default()` for that.
-    let store = Store::new_with_engine(&Universal::new(Cranelift::default()).engine());
+    let mut store = Store::default();
+
+    struct MyEnv;
+    let env = FunctionEnv::new(&mut store, MyEnv {});
 
     println!("Compiling module...");
     // Let's compile the Wasm module.
@@ -50,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create the functions
     let multiply_dynamic_signature = FunctionType::new(vec![Type::I32], vec![Type::I32]);
-    let multiply_dynamic = Function::new(&store, &multiply_dynamic_signature, |args| {
+    let multiply_dynamic = Function::new(&mut store, &multiply_dynamic_signature, |args| {
         println!("Calling `multiply_dynamic`...");
 
         let result = args[0].unwrap_i32() * 2;
@@ -60,40 +61,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(vec![Value::I32(result)])
     });
 
-    fn multiply(a: i32) -> i32 {
-        println!("Calling `multiply_native`...");
+    fn multiply(_env: FunctionEnvMut<MyEnv>, a: i32) -> i32 {
+        println!("Calling `multiply_typed`...");
         let result = a * 3;
 
-        println!("Result of `multiply_native`: {:?}", result);
+        println!("Result of `multiply_typed`: {:?}", result);
 
         result
     }
-    let multiply_native = Function::new_native(&store, multiply);
+    let multiply_typed = Function::new_typed_with_env(&mut store, &env, multiply);
 
     // Create an import object.
     let import_object = imports! {
         "env" => {
             "multiply_dynamic" => multiply_dynamic,
-            "multiply_native" => multiply_native,
+            "multiply_typed" => multiply_typed,
         }
     };
 
     println!("Instantiating module...");
     // Let's instantiate the Wasm module.
-    let instance = Instance::new(&module, &import_object)?;
+    let instance = Instance::new(&mut store, &module, &import_object)?;
 
     // Here we go.
     //
     // The Wasm module exports a function called `sum`. Let's get it.
-    let sum = instance
-        .exports
-        .get_function("sum")?
-        .native::<(i32, i32), i32>()?;
+    let sum: TypedFunction<(i32, i32), i32> =
+        instance.exports.get_function("sum")?.typed(&mut store)?;
 
     println!("Calling `sum` function...");
     // Let's call the `sum` exported function. It will call each
     // of the imported functions.
-    let result = sum.call(1, 2)?;
+    let result = sum.call(&mut store, 1, 2)?;
 
     println!("Results of `sum`: {:?}", result);
     assert_eq!(result, 8);

@@ -14,10 +14,21 @@ use thiserror::Error;
 ///
 /// All trap instructions have an explicit trap code.
 #[derive(
-    Clone, Copy, PartialEq, Eq, Debug, Hash, Error, RkyvSerialize, RkyvDeserialize, Archive,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Debug,
+    Hash,
+    Error,
+    RkyvSerialize,
+    RkyvDeserialize,
+    Archive,
+    rkyv::CheckBytes,
 )]
 #[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
 #[repr(u32)]
+#[archive(as = "Self")]
 pub enum TrapCode {
     /// The current stack space was exhausted.
     ///
@@ -38,29 +49,26 @@ pub enum TrapCode {
     /// A `table_addr` instruction detected an out-of-bounds error.
     TableAccessOutOfBounds = 3,
 
-    /// Other bounds checking error.
-    OutOfBounds = 4,
-
     /// Indirect call to a null table entry.
-    IndirectCallToNull = 5,
+    IndirectCallToNull = 4,
 
     /// Signature mismatch on indirect call.
-    BadSignature = 6,
+    BadSignature = 5,
 
     /// An integer arithmetic operation caused an overflow.
-    IntegerOverflow = 7,
+    IntegerOverflow = 6,
 
     /// An integer division by zero.
-    IntegerDivisionByZero = 8,
+    IntegerDivisionByZero = 7,
 
     /// Failed float-to-int conversion.
-    BadConversionToInteger = 9,
+    BadConversionToInteger = 8,
 
     /// Code that was supposed to have been unreachable was reached.
-    UnreachableCodeReached = 10,
+    UnreachableCodeReached = 9,
 
     /// An atomic memory access was attempted with an unaligned pointer.
-    UnalignedAtomic = 11,
+    UnalignedAtomic = 10,
 }
 
 impl TrapCode {
@@ -71,7 +79,6 @@ impl TrapCode {
             Self::HeapAccessOutOfBounds => "out of bounds memory access",
             Self::HeapMisaligned => "misaligned heap",
             Self::TableAccessOutOfBounds => "undefined element: out of bounds table access",
-            Self::OutOfBounds => "out of bounds",
             Self::IndirectCallToNull => "uninitialized element",
             Self::BadSignature => "indirect call type mismatch",
             Self::IntegerOverflow => "integer overflow",
@@ -90,7 +97,6 @@ impl Display for TrapCode {
             Self::HeapAccessOutOfBounds => "heap_get_oob",
             Self::HeapMisaligned => "heap_misaligned",
             Self::TableAccessOutOfBounds => "table_get_oob",
-            Self::OutOfBounds => "oob",
             Self::IndirectCallToNull => "icall_null",
             Self::BadSignature => "bad_sig",
             Self::IntegerOverflow => "int_ovf",
@@ -112,7 +118,6 @@ impl FromStr for TrapCode {
             "heap_get_oob" => Ok(Self::HeapAccessOutOfBounds),
             "heap_misaligned" => Ok(Self::HeapMisaligned),
             "table_get_oob" => Ok(Self::TableAccessOutOfBounds),
-            "oob" => Ok(Self::OutOfBounds),
             "icall_null" => Ok(Self::IndirectCallToNull),
             "bad_sig" => Ok(Self::BadSignature),
             "int_ovf" => Ok(Self::IntegerOverflow),
@@ -125,17 +130,29 @@ impl FromStr for TrapCode {
     }
 }
 
+// TODO: OnCalledAction is needed for asyncify. It will be refactored with https://github.com/wasmerio/wasmer/issues/3451
+/// After the stack is unwound via asyncify what
+/// should the call loop do next
+#[derive(Debug)]
+pub enum OnCalledAction {
+    /// Will call the function again
+    InvokeAgain,
+    /// Will return the result of the invocation
+    Finish,
+    /// Traps with an error
+    Trap(Box<dyn std::error::Error + Send + Sync>),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     // Everything but user-defined codes.
-    const CODES: [TrapCode; 12] = [
+    const CODES: [TrapCode; 11] = [
         TrapCode::StackOverflow,
         TrapCode::HeapAccessOutOfBounds,
         TrapCode::HeapMisaligned,
         TrapCode::TableAccessOutOfBounds,
-        TrapCode::OutOfBounds,
         TrapCode::IndirectCallToNull,
         TrapCode::BadSignature,
         TrapCode::IntegerOverflow,

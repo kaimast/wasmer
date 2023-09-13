@@ -8,8 +8,8 @@ use itertools::Itertools;
 use std::fmt::Debug;
 use std::sync::Arc;
 use target_lexicon::Architecture;
-use wasmer_compiler::{Compiler, CompilerConfig, ModuleMiddleware, Target, Triple};
-use wasmer_types::{FunctionType, LocalFunctionIndex};
+use wasmer_compiler::{Compiler, CompilerConfig, Engine, EngineBuilder, ModuleMiddleware};
+use wasmer_types::{FunctionType, LocalFunctionIndex, Target, Triple};
 
 /// The InkWell ModuleInfo type
 pub type InkwellModule<'ctx> = inkwell::module::Module<'ctx>;
@@ -97,10 +97,17 @@ impl LLVM {
     }
 
     fn target_triple(&self, target: &Target) -> TargetTriple {
+        let architecture = if target.triple().architecture
+            == Architecture::Riscv64(target_lexicon::Riscv64Architecture::Riscv64gc)
+        {
+            target_lexicon::Architecture::Riscv64(target_lexicon::Riscv64Architecture::Riscv64)
+        } else {
+            target.triple().architecture
+        };
         // Hack: we're using is_pic to determine whether this is a native
         // build or not.
         let operating_system = if target.triple().operating_system
-            == wasmer_compiler::OperatingSystem::Darwin
+            == wasmer_types::OperatingSystem::Darwin
             && !self.is_pic
         {
             // LLVM detects static relocation + darwin + 64-bit and
@@ -112,7 +119,7 @@ impl LLVM {
             //  but not in the case of Aarch64, there the ABI is slightly different
             #[allow(clippy::match_single_binding)]
             match target.triple().architecture {
-                _ => wasmer_compiler::OperatingSystem::Linux,
+                _ => wasmer_types::OperatingSystem::Linux,
             }
         } else {
             target.triple().operating_system
@@ -123,7 +130,7 @@ impl LLVM {
             target_lexicon::BinaryFormat::Elf
         };
         let triple = Triple {
-            architecture: target.triple().architecture,
+            architecture,
             vendor: target.triple().vendor.clone(),
             operating_system,
             environment: target.triple().environment,
@@ -156,6 +163,14 @@ impl LLVM {
                 info: true,
                 machine_code: true,
             }),
+            Architecture::Riscv64(_) => InkwellTarget::initialize_riscv(&InitializationConfig {
+                asm_parser: true,
+                asm_printer: true,
+                base: true,
+                disassembler: true,
+                info: true,
+                machine_code: true,
+            }),
             // Architecture::Arm(_) => InkwellTarget::initialize_arm(&InitializationConfig {
             //     asm_parser: true,
             //     asm_printer: true,
@@ -177,16 +192,57 @@ impl LLVM {
 
         let target_triple = self.target_triple(target);
         let llvm_target = InkwellTarget::from_triple(&target_triple).unwrap();
-        llvm_target
+        let llvm_target_machine = llvm_target
             .create_target_machine(
                 &target_triple,
-                "generic",
-                &llvm_cpu_features,
+                match triple.architecture {
+                    Architecture::Riscv64(_) => "generic-rv64",
+                    _ => "generic",
+                },
+                match triple.architecture {
+                    Architecture::Riscv64(_) => "+m,+a,+c,+d,+f",
+                    _ => &llvm_cpu_features,
+                },
                 self.opt_level,
                 self.reloc_mode(),
-                self.code_model(),
+                match triple.architecture {
+                    Architecture::Riscv64(_) => CodeModel::Medium,
+                    _ => self.code_model(),
+                },
             )
-            .unwrap()
+            .unwrap();
+
+        if let Architecture::Riscv64(_) = triple.architecture {
+            // TODO: totally non-portable way to change ABI
+            unsafe {
+                // This structure mimic the internal structure from inkwell
+                // that is defined as
+                //  #[derive(Debug)]
+                //  pub struct TargetMachine {
+                //    pub(crate) target_machine: LLVMTargetMachineRef,
+                //  }
+                pub struct MyTargetMachine {
+                    pub target_machine: *const u8,
+                }
+                // It is use to live patch the create LLVMTargetMachine
+                // to hard change the ABI and force "-mabi=lp64d" ABI
+                // instead of the default that don't use float registers
+                // because there is no current way to do this change
+
+                let my_target_machine: MyTargetMachine = std::mem::transmute(llvm_target_machine);
+
+                *((my_target_machine.target_machine as *mut u8).offset(0x410) as *mut u64) = 5;
+                std::ptr::copy_nonoverlapping(
+                    "lp64d\0".as_ptr(),
+                    (my_target_machine.target_machine as *mut u8).offset(0x418),
+                    6,
+                );
+
+                std::mem::transmute(my_target_machine)
+            }
+        } else {
+            llvm_target_machine
+        }
     }
 }
 
@@ -201,10 +257,6 @@ impl CompilerConfig for LLVM {
     /// Whether to verify compiler IR.
     fn enable_verifier(&mut self) {
         self.enable_verifier = true;
-    }
-
-    fn enable_nan_canonicalization(&mut self) {
-        self.enable_nan_canonicalization = true;
     }
 
     fn canonicalize_nans(&mut self, enable: bool) {
@@ -225,5 +277,11 @@ impl CompilerConfig for LLVM {
 impl Default for LLVM {
     fn default() -> LLVM {
         Self::new()
+    }
+}
+
+impl From<LLVM> for Engine {
+    fn from(config: LLVM) -> Self {
+        EngineBuilder::new(config).engine()
     }
 }

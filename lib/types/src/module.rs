@@ -14,8 +14,8 @@ use crate::{
 use indexmap::IndexMap;
 use rkyv::{
     de::SharedDeserializeRegistry, ser::ScratchSpace, ser::Serializer,
-    ser::SharedSerializeRegistry, Archive, Archived, Deserialize as RkyvDeserialize, Fallible,
-    Serialize as RkyvSerialize,
+    ser::SharedSerializeRegistry, Archive, Archived, CheckBytes, Deserialize as RkyvDeserialize,
+    Fallible, Serialize as RkyvSerialize,
 };
 #[cfg(feature = "enable-serde")]
 use serde::{Deserialize, Serialize};
@@ -24,9 +24,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::iter::ExactSizeIterator;
 use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
-use std::sync::Arc;
 
 #[derive(Debug, Clone, RkyvSerialize, RkyvDeserialize, Archive)]
+#[archive_attr(derive(CheckBytes))]
 pub struct ModuleId {
     id: usize,
 }
@@ -43,6 +43,57 @@ impl Default for ModuleId {
         Self {
             id: NEXT_ID.fetch_add(1, SeqCst),
         }
+    }
+}
+
+/// Hash key of an import
+#[derive(Debug, Hash, Eq, PartialEq, Clone, Default, RkyvSerialize, RkyvDeserialize, Archive)]
+#[cfg_attr(feature = "enable-serde", derive(Serialize, Deserialize))]
+#[archive_attr(derive(CheckBytes, PartialEq, Eq, Hash))]
+pub struct ImportKey {
+    /// Module name
+    pub module: String,
+    /// Field name
+    pub field: String,
+    /// Import index
+    pub import_idx: u32,
+}
+
+impl From<(String, String, u32)> for ImportKey {
+    fn from((module, field, import_idx): (String, String, u32)) -> Self {
+        Self {
+            module,
+            field,
+            import_idx,
+        }
+    }
+}
+
+#[cfg(feature = "enable-serde")]
+mod serde_imports {
+
+    use crate::ImportIndex;
+    use crate::ImportKey;
+    use indexmap::IndexMap;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    type InitialType = IndexMap<ImportKey, ImportIndex>;
+    type SerializedType = Vec<(ImportKey, ImportIndex)>;
+    // IndexMap<ImportKey, ImportIndex>
+    // Vec<
+    pub fn serialize<S: Serializer>(s: &InitialType, serializer: S) -> Result<S::Ok, S::Error> {
+        let vec: SerializedType = s
+            .iter()
+            .map(|(a, b)| (a.clone(), b.clone()))
+            .collect::<Vec<_>>();
+        vec.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<InitialType, D::Error> {
+        let serialized = <SerializedType as Deserialize>::deserialize(deserializer)?;
+        Ok(serialized.into_iter().collect())
     }
 }
 
@@ -68,7 +119,8 @@ pub struct ModuleInfo {
     /// Keeping the `index_of_the_import` is important, as there can be
     /// two same references to the same import, and we don't want to confuse
     /// them.
-    pub imports: IndexMap<(String, String, u32), ImportIndex>,
+    #[cfg_attr(feature = "enable-serde", serde(with = "serde_imports"))]
+    pub imports: IndexMap<ImportKey, ImportIndex>,
 
     /// Exported entities.
     pub exports: IndexMap<String, ExportIndex>,
@@ -83,7 +135,7 @@ pub struct ModuleInfo {
     pub passive_elements: HashMap<ElemIndex, Box<[FunctionIndex]>>,
 
     /// WebAssembly passive data segments.
-    pub passive_data: HashMap<DataIndex, Arc<[u8]>>,
+    pub passive_data: HashMap<DataIndex, Box<[u8]>>,
 
     /// WebAssembly global initializers.
     pub global_initializers: PrimaryMap<LocalGlobalIndex, GlobalInit>,
@@ -110,7 +162,7 @@ pub struct ModuleInfo {
     pub custom_sections: IndexMap<String, CustomSectionIndex>,
 
     /// The data for each CustomSection in the module.
-    pub custom_sections_data: PrimaryMap<CustomSectionIndex, Arc<[u8]>>,
+    pub custom_sections_data: PrimaryMap<CustomSectionIndex, Box<[u8]>>,
 
     /// Number of imported functions in the module.
     pub num_imported_functions: usize,
@@ -127,14 +179,15 @@ pub struct ModuleInfo {
 
 /// Mirror version of ModuleInfo that can derive rkyv traits
 #[derive(RkyvSerialize, RkyvDeserialize, Archive)]
+#[archive_attr(derive(CheckBytes))]
 pub struct ArchivableModuleInfo {
     name: Option<String>,
-    imports: IndexMap<(String, String, u32), ImportIndex>,
+    imports: IndexMap<ImportKey, ImportIndex>,
     exports: IndexMap<String, ExportIndex>,
     start_function: Option<FunctionIndex>,
     table_initializers: Vec<TableInitializer>,
     passive_elements: BTreeMap<ElemIndex, Box<[FunctionIndex]>>,
-    passive_data: BTreeMap<DataIndex, Arc<[u8]>>,
+    passive_data: BTreeMap<DataIndex, Box<[u8]>>,
     global_initializers: PrimaryMap<LocalGlobalIndex, GlobalInit>,
     function_names: BTreeMap<FunctionIndex, String>,
     signatures: PrimaryMap<SignatureIndex, FunctionType>,
@@ -143,7 +196,7 @@ pub struct ArchivableModuleInfo {
     memories: PrimaryMap<MemoryIndex, MemoryType>,
     globals: PrimaryMap<GlobalIndex, GlobalType>,
     custom_sections: IndexMap<String, CustomSectionIndex>,
-    custom_sections_data: PrimaryMap<CustomSectionIndex, Arc<[u8]>>,
+    custom_sections_data: PrimaryMap<CustomSectionIndex, Box<[u8]>>,
     num_imported_functions: usize,
     num_imported_tables: usize,
     num_imported_memories: usize,
@@ -321,36 +374,36 @@ impl ModuleInfo {
 
     /// Get the import types of the module
     pub fn imports(&'_ self) -> ImportsIterator<impl Iterator<Item = ImportType> + '_> {
-        let iter = self
-            .imports
-            .iter()
-            .map(move |((module, field, _), import_index)| {
-                let extern_type = match import_index {
-                    ImportIndex::Function(i) => {
-                        let signature = self.functions.get(*i).unwrap();
-                        let func_type = self.signatures.get(*signature).unwrap();
-                        ExternType::Function(func_type.clone())
-                    }
-                    ImportIndex::Table(i) => {
-                        let table_type = self.tables.get(*i).unwrap();
-                        ExternType::Table(*table_type)
-                    }
-                    ImportIndex::Memory(i) => {
-                        let memory_type = self.memories.get(*i).unwrap();
-                        ExternType::Memory(*memory_type)
-                    }
-                    ImportIndex::Global(i) => {
-                        let global_type = self.globals.get(*i).unwrap();
-                        ExternType::Global(*global_type)
-                    }
-                };
-                ImportType::new(module, field, extern_type)
-            });
+        let iter =
+            self.imports
+                .iter()
+                .map(move |(ImportKey { module, field, .. }, import_index)| {
+                    let extern_type = match import_index {
+                        ImportIndex::Function(i) => {
+                            let signature = self.functions.get(*i).unwrap();
+                            let func_type = self.signatures.get(*signature).unwrap();
+                            ExternType::Function(func_type.clone())
+                        }
+                        ImportIndex::Table(i) => {
+                            let table_type = self.tables.get(*i).unwrap();
+                            ExternType::Table(*table_type)
+                        }
+                        ImportIndex::Memory(i) => {
+                            let memory_type = self.memories.get(*i).unwrap();
+                            ExternType::Memory(*memory_type)
+                        }
+                        ImportIndex::Global(i) => {
+                            let global_type = self.globals.get(*i).unwrap();
+                            ExternType::Global(*global_type)
+                        }
+                    };
+                    ImportType::new(module, field, extern_type)
+                });
         ImportsIterator::new(iter, self.imports.len())
     }
 
     /// Get the custom sections of the module given a `name`.
-    pub fn custom_sections<'a>(&'a self, name: &'a str) -> impl Iterator<Item = Arc<[u8]>> + 'a {
+    pub fn custom_sections<'a>(&'a self, name: &'a str) -> impl Iterator<Item = Box<[u8]>> + 'a {
         self.custom_sections
             .iter()
             .filter_map(move |(section_name, section_index)| {

@@ -5,12 +5,11 @@ This crate contains a compiler implementation based on [the LLVM Compiler Infras
 ## Usage
 
 ```rust
-use wasmer::{Store, Universal};
+use wasmer::{Store, EngineBuilder};
 use wasmer_compiler_llvm::LLVM;
 
 let compiler = LLVM::new();
-// Put it into an engine and add it to the store
-let store = Store::new_with_engine(&Universal::new(compiler).engine());
+let mut store = Store::new(compiler);
 ```
 
 *Note: you can find a [full working example using LLVM compiler here][example].*
@@ -24,20 +23,20 @@ to native speeds.
 ## Requirements
 
 The LLVM compiler requires a valid installation of LLVM in your system.
-It currently requires **LLVM 12**.
+It currently requires **LLVM 14**.
 
 
 You can install LLVM easily on your Debian-like system via this command:
 
 ```bash
 wget https://apt.llvm.org/llvm.sh -O /tmp/llvm.sh
-sudo bash /tmp/llvm.sh 12
+sudo bash /tmp/llvm.sh 14
 ```
 
 Or in macOS:
 
 ```bash
-brew install llvm
+brew install llvm@14
 ```
 
 Or via any of the [pre-built binaries that LLVM offers][llvm-pre-built].

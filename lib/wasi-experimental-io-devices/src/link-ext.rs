@@ -5,8 +5,9 @@ use std::collections::{BTreeSet, VecDeque};
 use std::convert::TryInto;
 use std::io::{Read, Seek, SeekFrom, Write};
 use tracing::debug;
-use wasmer_wasi::{types::*, WasiInodes};
-use wasmer_wasi::{Fd, VirtualFile, WasiFs, WasiFsError, ALL_RIGHTS, VIRTUAL_ROOT_FD};
+use wasmer_wasix::types::{wasi::Filesize, *};
+use wasmer_wasix::{VirtualFile, WasiFsError, ALL_RIGHTS};
+use wasmer_wasix_types::wasi::Fdflags;
 
 use minifb::{Key, KeyRepeat, MouseButton, Scale, Window, WindowOptions};
 
@@ -15,6 +16,8 @@ mod util;
 use util::*;
 
 use std::cell::RefCell;
+use wasmer_wasix::os::fs::fd::Fd;
+use wasmer_wasix::os::fs::{WasiFs, WasiInodes, VIRTUAL_ROOT_FD};
 std::thread_local! {
     pub(crate) static FRAMEBUFFER_STATE: RefCell<FrameBufferState> =
         RefCell::new(FrameBufferState::new()
@@ -46,7 +49,7 @@ pub(crate) struct FrameBufferState {
 
     pub last_mouse_pos: (u32, u32),
     pub inputs: VecDeque<InputEvent>,
-    pub keys_pressed: BTreeSet<minifb::Key>,
+    pub keys: Vec<minifb::Key>,
 }
 
 impl FrameBufferState {
@@ -70,7 +73,7 @@ impl FrameBufferState {
             window,
             last_mouse_pos: (0, 0),
             inputs: VecDeque::with_capacity(Self::MAX_INPUTS),
-            keys_pressed: BTreeSet::new(),
+            keys: Vec::new(),
         }
     }
 
@@ -93,7 +96,7 @@ impl FrameBufferState {
             return None;
         }
         self.x_size = x;
-        self.y_size = x;
+        self.y_size = y;
 
         self.data_1.resize((x * y) as usize, 0);
         self.data_2.resize((x * y) as usize, 0);
@@ -113,21 +116,26 @@ impl FrameBufferState {
     }
 
     pub fn fill_input_buffer(&mut self) -> Option<()> {
-        let keys_pressed = self.keys_pressed.iter().cloned().collect::<Vec<Key>>();
         if !self.window.is_open() {
             self.push_input_event(InputEvent::WindowClosed)?;
         }
-        for key in keys_pressed {
-            if self.window.is_key_released(key) {
-                self.keys_pressed.remove(&key);
-                self.push_input_event(InputEvent::KeyRelease(key))?;
+
+        let keys = self.keys.iter().cloned().collect::<Vec<Key>>();
+        let new_keys = self.window.get_keys();
+
+        for key in &keys {
+            if !new_keys.contains(&key) {
+                self.push_input_event(InputEvent::KeyRelease(*key))?;
             }
         }
-        let keys = self.window.get_keys_pressed(KeyRepeat::No)?;
-        for key in keys {
-            self.keys_pressed.insert(key);
-            self.push_input_event(InputEvent::KeyPress(key))?;
+
+        for key in &new_keys {
+            if !keys.contains(&key) {
+                self.push_input_event(InputEvent::KeyPress(*key))?;
+            }
         }
+
+        self.keys = new_keys;
 
         let mouse_position = self.window.get_mouse_pos(minifb::MouseMode::Clamp)?;
         if mouse_position.0 as u32 != self.last_mouse_pos.0
@@ -417,7 +425,7 @@ impl VirtualFile for FrameBuffer {
     fn size(&self) -> u64 {
         0
     }
-    fn set_len(&mut self, _new_size: __wasi_filesize_t) -> Result<(), WasiFsError> {
+    fn set_len(&mut self, _new_size: Filesize) -> Result<(), WasiFsError> {
         Ok(())
     }
     fn unlink(&mut self) -> Result<(), WasiFsError> {
@@ -428,7 +436,7 @@ impl VirtualFile for FrameBuffer {
     }
 }
 
-pub fn initialize(inodes: &mut WasiInodes, fs: &mut WasiFs) -> Result<(), String> {
+pub fn initialize(inodes: &WasiInodes, fs: &mut WasiFs) -> Result<(), String> {
     let frame_buffer_file = Box::new(FrameBuffer {
         fb_type: FrameBufferFileType::Buffer,
         cursor: 0,
@@ -453,7 +461,7 @@ pub fn initialize(inodes: &mut WasiInodes, fs: &mut WasiFs) -> Result<(), String
             "_wasmer/dev/fb0".to_string(),
             ALL_RIGHTS,
             ALL_RIGHTS,
-            0,
+            Fdflags::empty(),
         )
         .map_err(|e| format!("fb: Failed to create dev folder {:?}", e))?
     };
@@ -467,7 +475,7 @@ pub fn initialize(inodes: &mut WasiInodes, fs: &mut WasiFs) -> Result<(), String
             "input".to_string(),
             ALL_RIGHTS,
             ALL_RIGHTS,
-            0,
+            Fdflags::empty(),
         )
         .map_err(|e| format!("fb: Failed to init framebuffer {:?}", e))?;
 
@@ -482,7 +490,7 @@ pub fn initialize(inodes: &mut WasiInodes, fs: &mut WasiFs) -> Result<(), String
             "fb".to_string(),
             ALL_RIGHTS,
             ALL_RIGHTS,
-            0,
+            Fdflags::empty(),
         )
         .map_err(|e| format!("fb: Failed to init framebuffer {:?}", e))?;
 
@@ -497,7 +505,7 @@ pub fn initialize(inodes: &mut WasiInodes, fs: &mut WasiFs) -> Result<(), String
             "virtual_size".to_string(),
             ALL_RIGHTS,
             ALL_RIGHTS,
-            0,
+            Fdflags::empty(),
         )
         .map_err(|e| format!("fb_resolution: Failed to init framebuffer {:?}", e))?;
 
@@ -512,7 +520,7 @@ pub fn initialize(inodes: &mut WasiInodes, fs: &mut WasiFs) -> Result<(), String
             "draw".to_string(),
             ALL_RIGHTS,
             ALL_RIGHTS,
-            0,
+            Fdflags::empty(),
         )
         .map_err(|e| format!("fb_index_display: Failed to init framebuffer {:?}", e))?;
 

@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```rust
-//! # use inline_c::assert_c;
+//! # use wasmer_inline_c::assert_c;
 //! # fn main() {
 //! #    (assert_c! {
 //! # #include "tests/wasmer.h"
@@ -68,6 +68,7 @@ use wasmer_api::{CpuFeature, Target, Triple};
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
 pub struct wasmer_target_t {
+    #[allow(unused)]
     pub(crate) inner: Target,
 }
 
@@ -108,7 +109,7 @@ pub extern "C" fn wasmer_target_delete(_target: Option<Box<wasmer_target_t>>) {}
 /// # Example
 ///
 /// ```rust
-/// # use inline_c::assert_c;
+/// # use wasmer_inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
 /// # #include "tests/wasmer.h"
@@ -161,7 +162,7 @@ pub unsafe extern "C" fn wasmer_triple_new(
 /// # Example
 ///
 /// ```rust
-/// # use inline_c::assert_c;
+/// # use wasmer_inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
 /// # #include "tests/wasmer.h"
@@ -225,7 +226,7 @@ pub extern "C" fn wasmer_triple_delete(_triple: Option<Box<wasmer_triple_t>>) {}
 /// # Example
 ///
 /// ```rust
-/// # use inline_c::assert_c;
+/// # use wasmer_inline_c::assert_c;
 /// # fn main() {
 /// #    (assert_c! {
 /// # #include "tests/wasmer.h"

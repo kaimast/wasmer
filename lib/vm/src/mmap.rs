@@ -26,8 +26,8 @@ pub struct Mmap {
     // `unsafe impl`. This type is sendable across threads and shareable since
     // the coordination all happens at the OS layer.
     ptr: usize,
-    len: usize,
-    memfd: Option<RawFd>,
+    total_size: usize,
+    accessible_size: usize,
 }
 
 impl Mmap {
@@ -39,8 +39,8 @@ impl Mmap {
         let empty = Vec::<u8>::new();
         Self {
             ptr: empty.as_ptr() as usize,
-            len: 0,
-            memfd: None,
+            total_size: 0,
+            accessible_size: 0,
         }
     }
 
@@ -76,8 +76,7 @@ impl Mmap {
         } else {
             let label = std::ffi::CString::new("wasmer").unwrap();
             let flags = nix::sys::memfd::MemFdCreateFlag::empty();
-            nix::sys::memfd::memfd_create(&label, flags)
-                    .expect("Failed to create memfd")
+            nix::sys::memfd::memfd_create(&label, flags).expect("Failed to create memfd")
         };
 
         nix::unistd::ftruncate(memfd, mapping_size as i64).expect("Failed to resize memfd");
@@ -97,15 +96,21 @@ impl Mmap {
             };
 
             let ptr = ptr as usize;
-            log::trace!("Memory mapped {} bytes to {:#X}-{:#X}", mapping_size, ptr, ptr+mapping_size);
+            log::trace!(
+                "Memory mapped {} bytes to {:#X}-{:#X}",
+                mapping_size,
+                ptr,
+                ptr + mapping_size
+            );
 
             if ptr as isize == -1_isize {
                 return Err(io::Error::last_os_error().to_string());
             }
 
             Self {
-                ptr, len: mapping_size,
-                memfd: Some(memfd),
+                ptr: ptr as usize,
+                total_size: mapping_size,
+                accessible_size,
             }
         } else {
             // Reserve the mapping size.
@@ -122,15 +127,21 @@ impl Mmap {
             };
 
             let ptr = ptr as usize;
-            log::trace!("Memory mapped {} bytes to {:#X}-{:#X}", mapping_size, ptr, ptr+mapping_size);
+            log::trace!(
+                "Memory mapped {} bytes to {:#X}-{:#X}",
+                mapping_size,
+                ptr,
+                ptr + mapping_size
+            );
 
             if ptr as isize == -1_isize {
                 return Err(io::Error::last_os_error().to_string());
             }
 
             let mut result = Self {
-                ptr, len: mapping_size,
-                memfd: Some(memfd),
+                ptr: ptr as usize,
+                total_size: mapping_size,
+                accessible_size,
             };
 
             if accessible_size != 0 {
@@ -189,10 +200,17 @@ impl Mmap {
             }
 
             let ptr = ptr as usize;
-            log::trace!("Memory mapped {} bytes to {:#X}-{:#X}", mapping_size, ptr, ptr+mapping_size);
+            log::trace!(
+                "Memory mapped {} bytes to {:#X}-{:#X}",
+                mapping_size,
+                ptr,
+                ptr + mapping_size
+            );
 
             Self {
-                ptr, len: mapping_size,
+                ptr: ptr as usize,
+                total_size: mapping_size,
+                accessible_size,
             }
         } else {
             // Reserve the mapping size.
@@ -203,10 +221,17 @@ impl Mmap {
             }
 
             let ptr = ptr as usize;
-            log::trace!("Memory mapped {} bytes to {:#X}-{:#X}", mapping_size, ptr, ptr+mapping_size);
+            log::trace!(
+                "Memory mapped {} bytes to {:#X}-{:#X}",
+                mapping_size,
+                ptr,
+                ptr + mapping_size
+            );
 
             let mut result = Self {
-                ptr, len: mapping_size,
+                ptr: ptr as usize,
+                total_size: mapping_size,
+                accessible_size,
             };
 
             if accessible_size != 0 {
@@ -226,8 +251,8 @@ impl Mmap {
         let page_size = region::page::size();
         assert_eq!(start & (page_size - 1), 0);
         assert_eq!(len & (page_size - 1), 0);
-        assert_lt!(len, self.len);
-        assert_lt!(start, self.len - len);
+        assert_lt!(len, self.total_size);
+        assert_lt!(start, self.total_size - len);
 
         // Commit the accessible size.
         let ptr = self.ptr as *const u8;
@@ -246,8 +271,8 @@ impl Mmap {
         let page_size = region::page::size();
         assert_eq!(start & (page_size - 1), 0);
         assert_eq!(len & (page_size - 1), 0);
-        assert_lt!(len, self.len);
-        assert_lt!(start, self.len - len);
+        assert_lt!(len, self.len());
+        assert_lt!(start, self.len() - len);
 
         // Commit the accessible size.
         let ptr = self.ptr as *const u8;
@@ -269,12 +294,34 @@ impl Mmap {
 
     /// Return the allocated memory as a slice of u8.
     pub fn as_slice(&self) -> &[u8] {
-        unsafe { slice::from_raw_parts(self.ptr as *const u8, self.len) }
+        unsafe { slice::from_raw_parts(self.ptr as *const u8, self.total_size) }
+    }
+
+    /// Return the allocated memory as a slice of u8.
+    pub fn as_slice_accessible(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(self.ptr as *const u8, self.accessible_size) }
+    }
+
+    /// Return the allocated memory as a slice of u8.
+    pub fn as_slice_arbitary(&self, size: usize) -> &[u8] {
+        let size = usize::min(size, self.total_size);
+        unsafe { slice::from_raw_parts(self.ptr as *const u8, size) }
     }
 
     /// Return the allocated memory as a mutable slice of u8.
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.ptr as *mut u8, self.len) }
+        unsafe { slice::from_raw_parts_mut(self.ptr as *mut u8, self.total_size) }
+    }
+
+    /// Return the allocated memory as a mutable slice of u8.
+    pub fn as_mut_slice_accessible(&mut self) -> &mut [u8] {
+        unsafe { slice::from_raw_parts_mut(self.ptr as *mut u8, self.accessible_size) }
+    }
+
+    /// Return the allocated memory as a mutable slice of u8.
+    pub fn as_mut_slice_arbitary(&mut self, size: usize) -> &mut [u8] {
+        let size = usize::min(size, self.total_size);
+        unsafe { slice::from_raw_parts_mut(self.ptr as *mut u8, size) }
     }
 
     /// Return the allocated memory as a pointer to u8.
@@ -289,7 +336,7 @@ impl Mmap {
 
     /// Return the length of the allocated memory.
     pub fn len(&self) -> usize {
-        self.len
+        self.total_size
     }
 
     /// Return whether any memory has been allocated.
@@ -298,32 +345,61 @@ impl Mmap {
     }
 
     /// Create an identical (COW) copy of this memory-mapped region
-    pub fn duplicate(&self) -> Result<Self, String> {
+    pub fn cow_duplicate(&self) -> Result<Self, String> {
         let memfd = if let Some(memfd) = self.memfd {
             memfd
         } else {
             return Err(String::from("Not a Zygote"));
         };
 
-        let ptr = unsafe{ libc::mmap(
-            ptr::null_mut(),
-            self.len,
-            libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_PRIVATE,
-            memfd,
-            0,
-        )} as usize;
+        let ptr = unsafe {
+            libc::mmap(
+                ptr::null_mut(),
+                self.len,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_PRIVATE,
+                memfd,
+                0,
+            )
+        } as usize;
 
         if ptr as isize == -1_isize {
             return Err(io::Error::last_os_error().to_string());
         }
 
-        log::trace!("Duplicated memory from {:#X} to {:#X} ({} bytes)", self.ptr, ptr, self.len);
+        log::trace!(
+            "Duplicated memory from {:#X} to {:#X} ({} bytes)",
+            self.ptr,
+            ptr,
+            self.len
+        );
 
         Ok(Self {
-            ptr, len: self.len,
+            ptr,
+            len: self.len,
             memfd: None,
         })
+    }
+
+    /// Duplicate in a new memory mapping.
+    #[deprecated = "use `copy` instead"]
+    pub fn duplicate(&mut self, size_hint: Option<usize>) -> Result<Self, String> {
+        self.copy(size_hint)
+    }
+
+    /// Duplicate in a new memory mapping.
+    pub fn copy(&mut self, size_hint: Option<usize>) -> Result<Self, String> {
+        // NOTE: accessible_size != used size as the value is not
+        //       automatically updated when the pre-provisioned space is used
+        let mut copy_size = self.accessible_size;
+        if let Some(size_hint) = size_hint {
+            copy_size = usize::max(copy_size, size_hint);
+        }
+
+        let mut new = Self::accessible_reserved(copy_size, self.total_size)?;
+        new.as_mut_slice_arbitary(copy_size)
+            .copy_from_slice(self.as_slice_arbitary(copy_size));
+        Ok(new)
     }
 }
 
@@ -331,7 +407,12 @@ impl Drop for Mmap {
     #[cfg(not(target_os = "windows"))]
     fn drop(&mut self) {
         if self.len != 0 {
-            log::trace!("Memory unmapping {} bytes at {:#X}-{:#X}", self.len, self.ptr, self.ptr+self.len);
+            log::trace!(
+                "Memory unmapping {} bytes at {:#X}-{:#X}",
+                self.len,
+                self.ptr,
+                self.ptr + self.len
+            );
 
             let r = unsafe { libc::munmap(self.ptr as *mut libc::c_void, self.len) };
             assert_eq!(r, 0, "munmap failed: {}", io::Error::last_os_error());
@@ -346,8 +427,12 @@ impl Drop for Mmap {
     #[cfg(target_os = "windows")]
     fn drop(&mut self) {
         if self.len != 0 {
-            log::trace!("Memory unmapping {} bytes at {:#X}-{:#X}", self.len, self.ptr, self.ptr+self.len);
-
+            log::trace!(
+                "Memory unmapping {} bytes at {:#X}-{:#X}",
+                self.len,
+                self.ptr,
+                self.ptr + self.len
+            );
             use winapi::ctypes::c_void;
             use winapi::um::memoryapi::VirtualFree;
             use winapi::um::winnt::MEM_RELEASE;
