@@ -121,44 +121,6 @@ pub fn resolve_imports(
                     environment: unsafe { f.anyfunc.as_ptr().as_ref().vmctx },
                     handle,
                 });
-
-                let initializer = f.metadata.as_ref().and_then(|m| m.import_init_function_ptr);
-                let clone = f.metadata.as_ref().map(|m| m.host_env_clone_fn);
-                let destructor = f.metadata.as_ref().map(|m| m.host_env_drop_fn);
-
-                #[cfg(feature = "async")]
-                let import_function_env = {
-                    let set_yielder = f.metadata.as_ref().map(|m| m.host_env_set_yielder_fn);
-
-                    if let (Some(clone), Some(destructor), Some(set_yielder)) =
-                        (clone, destructor, set_yielder)
-                    {
-                        ImportFunctionEnv::Env {
-                            env,
-                            clone,
-                            set_yielder,
-                            initializer,
-                            destructor,
-                        }
-                    } else {
-                        ImportFunctionEnv::NoEnv
-                    }
-                };
-
-                #[cfg(not(feature = "async"))]
-                let import_function_env =
-                    if let (Some(clone), Some(destructor)) = (clone, destructor) {
-                        ImportFunctionEnv::Env {
-                            env,
-                            clone,
-                            initializer,
-                            destructor,
-                        }
-                    } else {
-                        ImportFunctionEnv::NoEnv
-                    };
-
-                host_function_env_initializers.push(import_function_env);
             }
             VMExtern::Table(handle) => {
                 let t = handle.get(context);

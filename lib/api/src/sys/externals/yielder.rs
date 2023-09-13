@@ -1,6 +1,6 @@
 use async_wormhole::AsyncYielder;
 
-use crate::{RuntimeError, Val};
+use crate::{RuntimeError, Value};
 
 /// Wrapper around `async-wormhole`'s yielder
 #[derive(Clone)]
@@ -15,8 +15,8 @@ impl Yielder {
     }
 
     /// Get the `AsyncYielder`
-    pub fn get(&self) -> &mut AsyncYielder<Result<Box<[Val]>, RuntimeError>> {
-        let yielder: &mut AsyncYielder<Result<Box<[Val]>, RuntimeError>> =
+    pub fn get(&self) -> &mut AsyncYielder<Result<Box<[Value]>, RuntimeError>> {
+        let yielder: &mut AsyncYielder<Result<Box<[Value]>, RuntimeError>> =
             unsafe { std::mem::transmute(self.inner) };
 
         yielder

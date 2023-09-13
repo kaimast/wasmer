@@ -958,7 +958,7 @@ impl Instance {
     /// This mirrors `Self::new` as much as possible
     pub(crate) unsafe fn duplicate(
         &self,
-        mut imports: Imports,
+        imports: Imports,
         vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
     ) -> VMInstance {
         let (allocator, memory_definition_locations, table_definition_locations) =

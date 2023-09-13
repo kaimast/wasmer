@@ -88,11 +88,6 @@ impl Instance {
             .collect::<Exports>()
     }
 
-    /// Gets the [`Module`] associated with this instance.
-    pub fn module(&self) -> &Module {
-        &self.module
-    }
-
     /// Call a function on a dedicated stack
     /// This allows for async host functions, but may create more overhead
     #[cfg(feature = "async")]
@@ -158,89 +153,17 @@ impl Instance {
         (result, task.stack())
     }
 
-    /// Returns the [`Store`] where the `Instance` belongs.
-    pub fn store(&self) -> &Store {
-        self.module.store()
-    }
-
-    #[doc(hidden)]
-    pub fn vmctx_ptr(&self) -> *mut VMContext {
-        self.handle.lock().unwrap().vmctx_ptr()
-    }
-
     /// Duplicate the entire state of this instance and create a new one
-    #[tracing::instrument(skip(imports))]
-    pub unsafe fn duplicate(&self, imports: &Imports) -> Result<Self, InstantiationError> {
-        let artifact = self.module().artifact();
-        let module = self.module().clone();
-
-        let imports = imports
-            .imports_for_module(&module)
-            .map_err(InstantiationError::Link)?;
-
-        let instance_handle = {
-            let old_handle = self.handle.lock().unwrap();
-            //FIXME we only need to update the Envs. Do we really need to redo all of this?
-
-            let imports = imports
-                .iter()
-                .map(crate::Extern::to_export)
-                .collect::<Vec<_>>();
-
-            let imports = resolve_imports(
-                module.info(),
-                imports.as_slice(),
-                artifact.finished_dynamic_function_trampolines(),
-                artifact.memory_styles(),
-                artifact.table_styles(),
-            )
-            .unwrap();
-
-            old_handle.duplicate(imports, artifact.signatures())
-        };
-
-        let exports = self
-            .module()
-            .exports()
-            .map(|export| {
-                let name = export.name().to_string();
-                let export = instance_handle.lookup(&name).expect("export");
-                let extern_ = Extern::from_vm_export(self.store(), export.into());
-                (name, extern_)
-            })
-            .collect::<Exports>();
+    #[tracing::instrument(skip(self,store,imports))]
+    pub unsafe fn duplicate(&self, 
+        store: &mut impl AsStoreMut,
+        imports: Imports) -> Result<Self, InstantiationError> {
+        let handle = self._handle.get(store).duplicate(imports);
 
         let instance = Self {
-            handle: Arc::new(Mutex::new(instance_handle)),
-            module,
-            exports,
-            imports,
+            _handle: StoreHandle::new(store.objects_mut(), handle),
         };
 
-        {
-            let mut hdl = instance.handle.lock().unwrap();
-            hdl.initialize_host_envs::<HostEnvInitError>(&instance as *const _ as *const _)?;
-
-            let data_initializers = artifact
-                .data_initializers()
-                .iter()
-                .map(|init| wasmer_types::DataInitializer {
-                    location: init.location.clone(),
-                    data: &*init.data,
-                })
-                .collect::<Vec<_>>();
-
-            hdl.finish_duplication(&data_initializers);
-        }
-
         Ok(instance)
-    }
-}
-
-impl fmt::Debug for Instance {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Instance")
-            .field("exports", &self.exports)
-            .finish()
     }
 }

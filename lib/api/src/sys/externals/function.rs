@@ -24,52 +24,6 @@ impl From<StoreHandle<VMFunction>> for Function {
     }
 }
 
-fn build_export_function_metadata<Env>(
-    env: Env,
-    import_init_function_ptr: for<'a> fn(
-        &'a mut Env,
-        &'a crate::Instance,
-    ) -> Result<(), crate::HostEnvInitError>,
-    #[cfg(feature = "async")] host_env_set_yielder_fn: fn(*mut c_void, *const c_void),
-) -> (*mut c_void, ExportFunctionMetadata)
-where
-    Env: Clone + Sized + 'static + Send + Sync,
-{
-    let import_init_function_ptr = Some(unsafe {
-        std::mem::transmute::<_, ImportInitializerFuncPtr>(import_init_function_ptr)
-    });
-    let host_env_clone_fn = |ptr: *mut c_void| -> *mut c_void {
-        let env_ref: &Env = unsafe {
-            ptr.cast::<Env>()
-                .as_ref()
-                .expect("`ptr` to the environment is null when cloning it")
-        };
-        Box::into_raw(Box::new(env_ref.clone())) as _
-    };
-    let host_env_drop_fn = |ptr: *mut c_void| {
-        unsafe { Box::from_raw(ptr.cast::<Env>()) };
-    };
-    let env = Box::into_raw(Box::new(env)) as _;
-
-    // # Safety
-    // - All these functions work on all threads
-    // - The host env is `Send`.
-    let metadata = unsafe {
-        ExportFunctionMetadata::new(
-            env,
-            import_init_function_ptr,
-            host_env_clone_fn,
-            #[cfg(feature = "async")]
-            host_env_set_yielder_fn,
-            host_env_drop_fn,
-        )
-    };
-
-    (env, metadata)
-}
-
-impl WasmerEnv for WithoutEnv {}
-
 impl Function {
     pub fn new_with_env<FT, F, T: Send + 'static>(
         store: &mut impl AsStoreMut,
@@ -217,7 +171,7 @@ impl Function {
         });
         let function_type = FunctionType::new(Args::wasm_types(), Rets::wasm_types());
 
-        #[cfg(feature = "async")]
+/*        #[cfg(feature = "async")]
         let (host_env, metadata) = {
             let host_env_set_yielder_fn = |env_ptr, yielder_ptr| {
                 let env: &mut Env = unsafe { std::mem::transmute(env_ptr) };
@@ -234,9 +188,10 @@ impl Function {
         #[cfg(not(feature = "async"))]
         let (host_env, metadata) =
             build_export_function_metadata::<Env>(env, Env::init_with_instance);
-
         let vmctx = VMFunctionEnvironment { host_env };
         let signature = function.ty();
+*/
+
         let type_index = store
             .as_store_mut()
             .engine()
