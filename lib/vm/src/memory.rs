@@ -11,45 +11,41 @@ use crate::trap::Trap;
 use crate::{mmap::Mmap, store::MaybeInstanceOwned, vmcontext::VMMemoryDefinition};
 use more_asserts::assert_ge;
 use std::cell::UnsafeCell;
-use std::convert::TryInto;
 use std::ptr::NonNull;
 use std::slice;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use wasmer_types::{Bytes, MemoryError, MemoryStyle, MemoryType, Pages};
+use wasmer_types::{MemoryError, MemoryStyle, MemoryType, Pages};
 
-// The memory mapped area
+/// The memory mapped area
 #[derive(Debug)]
 struct WasmMmap {
     // Our OS allocation of mmap'd memory.
     alloc: Mmap,
     // The current logical size in wasm pages of this linear memory.
     size: Pages,
-    /// The owned memory definition used by the generated code
+    // The owned memory definition used by the generated code
     vm_memory_definition: MaybeInstanceOwned<VMMemoryDefinition>,
 }
 
 impl WasmMmap {
-    fn duplicate(&self) -> Result<Self, String> {
+    unsafe fn duplicate(&self) -> Result<Self, MemoryError> {
         let alloc = self.alloc.duplicate()?;
+        let vm_memory_definition = MaybeInstanceOwned::Host(
+            Box::new(UnsafeCell::new(self.vm_memory_definition.as_ptr().as_ref().clone()))
+        );
+
         Ok(Self {
             alloc,
             size: self.size,
+            vm_memory_definition,
         })
     }
 }
 
-impl LinearMemory {
-    fn get_vm_memory_definition(&self) -> NonNull<VMMemoryDefinition> {
-        self.vm_memory_definition.as_ptr()
-    }
-
+impl WasmMmap {
     fn size(&self) -> Pages {
-        unsafe {
-            let md_ptr = self.get_vm_memory_definition();
-            let md = md_ptr.as_ref();
-            Bytes::from(md.current_length).try_into().unwrap()
-        }
+        self.size
     }
 
     fn grow(&mut self, delta: Pages, conf: VMMemoryConfig) -> Result<Pages, MemoryError> {
@@ -67,15 +63,6 @@ impl LinearMemory {
             })?;
         let prev_pages = self.size;
 
-        if let Some(maximum) = conf.maximum {
-            if new_pages > maximum {
-                return Err(MemoryError::CouldNotGrow {
-                    current: self.size,
-                    attempted_delta: delta,
-                });
-            }
-        }
-
         // Wasm linear memories are never allowed to grow beyond what is
         // indexable. If the memory has no maximum, enforce the greatest
         // limit here.
@@ -91,20 +78,12 @@ impl LinearMemory {
         let prev_bytes = prev_pages.bytes().0;
         let new_bytes = new_pages.bytes().0;
 
-        if new_bytes > self.alloc.len() - conf.offset_guard_size {
+        if new_bytes > self.alloc.len() {
             // If the new size is within the declared maximum, but needs more memory than we
             // have on hand, it's a dynamic heap and it can move.
-            let guard_bytes = conf.offset_guard_size;
-            let request_bytes =
-                new_bytes
-                    .checked_add(guard_bytes)
-                    .ok_or_else(|| MemoryError::CouldNotGrow {
-                        current: new_pages,
-                        attempted_delta: Bytes(guard_bytes).try_into().unwrap(),
-                    })?;
-
+            let request_bytes = new_bytes + conf.offset_guard_size;
             let mut new_mmap =
-                Mmap::accessible_reserved(new_bytes, request_bytes).map_err(MemoryError::Region)?;
+                Mmap::accessible_reserved(new_bytes, request_bytes, None).map_err(MemoryError::Region)?;
 
             let copy_len = self.alloc.len() - conf.offset_guard_size;
             new_mmap.as_mut_slice()[..copy_len].copy_from_slice(&self.alloc.as_slice()[..copy_len]);
@@ -132,7 +111,7 @@ impl LinearMemory {
 
     /// Copies the memory
     /// (in this case it performs a copy-on-write to save memory)
-    pub fn copy(&mut self) -> Result<Self, MemoryError> {
+    fn copy(&mut self) -> Result<Self, MemoryError> {
         let mem_length = self.size.bytes().0;
         let mut alloc = self
             .alloc
@@ -155,14 +134,14 @@ impl LinearMemory {
 /// A linear memory instance.
 #[derive(Debug, Clone)]
 struct VMMemoryConfig {
-    // The optional maximum size in wasm pages of this linear memory.
+    /// The optional maximum size in wasm pages of this linear memory.
     maximum: Option<Pages>,
     /// The WebAssembly linear memory description.
     memory: MemoryType,
     /// Our chosen implementation style.
     style: MemoryStyle,
-    // Size in bytes of extra guard pages after the end to optimize loads and stores with
-    // constant offsets.
+    /// Size in bytes of extra guard pages after the end to optimize loads and stores with
+    /// constant offsets.
     offset_guard_size: usize,
 }
 
@@ -259,7 +238,7 @@ impl VMOwnedMemory {
         let mapped_pages = memory.minimum;
         let mapped_bytes = mapped_pages.bytes();
 
-        let mut alloc = Mmap::accessible_reserved(mapped_bytes.0, request_bytes)
+        let mut alloc = Mmap::accessible_reserved(mapped_bytes.0, request_bytes, None)
             .map_err(MemoryError::Region)?;
         let base_ptr = alloc.as_mut_ptr();
         let mem_length = memory.minimum.bytes().0;
@@ -350,6 +329,20 @@ impl LinearMemory for VMOwnedMemory {
     fn copy(&mut self) -> Result<Box<dyn LinearMemory + 'static>, MemoryError> {
         let forked = Self::copy(self)?;
         Ok(Box::new(forked))
+    }
+
+    fn duplicate(
+        &self,
+        mut mem_loc: NonNull<VMMemoryDefinition>,
+    ) -> Result<Box<dyn LinearMemory + 'static>, MemoryError> {
+/*        if !matches!(self.style, MemoryStyle::Dynamic { .. }) {
+            return Err(String::from("Can only duplicate dynamic memory"));
+        }*/
+
+        Ok(Box::new(Self {
+            mmap: unsafe{ self.mmap.duplicate().unwrap() },
+            config: self.config.clone(),
+        }))
     }
 }
 
@@ -462,6 +455,13 @@ impl LinearMemory for VMSharedMemory {
     fn do_notify(&mut self, dst: NotifyLocation, count: u32) -> u32 {
         self.conditions.do_notify(dst, count)
     }
+
+    fn duplicate(
+        &self,
+        mem_loc: NonNull<VMMemoryDefinition>,
+    ) -> Result<Box<dyn LinearMemory + 'static>, MemoryError> {
+        unimplemented!();
+    }
 }
 
 impl From<VMOwnedMemory> for VMMemory {
@@ -542,6 +542,14 @@ impl LinearMemory for VMMemory {
     /// Notify waiters from the wait list. Return the number of waiters notified
     fn do_notify(&mut self, dst: NotifyLocation, count: u32) -> u32 {
         self.0.do_notify(dst, count)
+    }
+
+    // Create an identical copy of this memory
+    fn duplicate(
+        &self,
+        mem_loc: NonNull<VMMemoryDefinition>,
+    ) -> Result<Box<dyn LinearMemory + 'static>, MemoryError> {
+        self.0.duplicate(mem_loc)
     }
 }
 
@@ -677,39 +685,9 @@ where
         0
     }
 
-    // Create an identical copy of this memory
+    /// Create an identical copy of this memory
     fn duplicate(
         &self,
-        mut mem_loc: NonNull<VMMemoryDefinition>,
-    ) -> Result<Arc<dyn Memory>, String> {
-        if !matches!(self.style, MemoryStyle::Dynamic { .. }) {
-            return Err(String::from("Can only duplicate dynamic memory"));
-        }
-
-        let mut mmap = {
-            let lock = self.mmap.lock().unwrap();
-            lock.duplicate()?
-        };
-
-        let vm_memory_definition = match self.vm_memory_definition {
-            VMMemoryDefinitionOwnership::VMOwned(old_loc) => {
-                let md = unsafe { mem_loc.as_mut() };
-                md.base = mmap.alloc.as_mut_ptr() as _;
-                md.current_length = unsafe { old_loc.as_ref().current_length };
-                VMMemoryDefinitionOwnership::VMOwned(mem_loc)
-            }
-            VMMemoryDefinitionOwnership::HostOwned(_) => {
-                panic!("Can only duplicate VMOwned memory (for now)");
-            }
-        };
-
-        Ok(Arc::new(Self {
-            style: self.style.clone(),
-            mmap: Mutex::new(mmap),
-            maximum: self.maximum,
-            memory: self.memory,
-            offset_guard_size: self.offset_guard_size,
-            vm_memory_definition,
-        }))
-    }
+        mem_loc: NonNull<VMMemoryDefinition>,
+    ) -> Result<Box<dyn LinearMemory + 'static>, MemoryError>;
 }

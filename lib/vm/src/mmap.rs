@@ -12,6 +12,8 @@ use std::slice;
 
 use std::os::unix::io::RawFd;
 
+use wasmer_types::MemoryError;
+
 /// Round `size` up to the nearest multiple of `page_size`.
 fn round_up_to_page_size(size: usize, page_size: usize) -> usize {
     (size + (page_size - 1)) & !(page_size - 1)
@@ -28,6 +30,7 @@ pub struct Mmap {
     ptr: usize,
     total_size: usize,
     accessible_size: usize,
+    memfd: Option<RawFd>,
 }
 
 impl Mmap {
@@ -41,6 +44,7 @@ impl Mmap {
             ptr: empty.as_ptr() as usize,
             total_size: 0,
             accessible_size: 0,
+            memfd: None
         }
     }
 
@@ -108,9 +112,10 @@ impl Mmap {
             }
 
             Self {
-                ptr: ptr as usize,
+                ptr,
                 total_size: mapping_size,
                 accessible_size,
+                memfd: Some(memfd),
             }
         } else {
             // Reserve the mapping size.
@@ -139,9 +144,10 @@ impl Mmap {
             }
 
             let mut result = Self {
-                ptr: ptr as usize,
+                ptr,
                 total_size: mapping_size,
                 accessible_size,
+                memfd: Some(memfd),
             };
 
             if accessible_size != 0 {
@@ -345,17 +351,18 @@ impl Mmap {
     }
 
     /// Create an identical (COW) copy of this memory-mapped region
-    pub fn cow_duplicate(&self) -> Result<Self, String> {
+    pub fn duplicate(&self) -> Result<Self, MemoryError> {
         let memfd = if let Some(memfd) = self.memfd {
             memfd
         } else {
-            return Err(String::from("Not a Zygote"));
+            panic!("Not a zygote");
+//            return Err(String::from("Not a Zygote"));
         };
 
         let ptr = unsafe {
             libc::mmap(
                 ptr::null_mut(),
-                self.len,
+                self.len(),
                 libc::PROT_READ | libc::PROT_WRITE,
                 libc::MAP_PRIVATE,
                 memfd,
@@ -364,27 +371,23 @@ impl Mmap {
         } as usize;
 
         if ptr as isize == -1_isize {
-            return Err(io::Error::last_os_error().to_string());
+            //return Err(io::Error::last_os_error().to_string());
+            panic!("{}", io::Error::last_os_error().to_string());
         }
 
         log::trace!(
             "Duplicated memory from {:#X} to {:#X} ({} bytes)",
             self.ptr,
             ptr,
-            self.len
+            self.len(),
         );
 
         Ok(Self {
             ptr,
-            len: self.len,
+            accessible_size: self.accessible_size,
+            total_size: self.total_size,
             memfd: None,
         })
-    }
-
-    /// Duplicate in a new memory mapping.
-    #[deprecated = "use `copy` instead"]
-    pub fn duplicate(&mut self, size_hint: Option<usize>) -> Result<Self, String> {
-        self.copy(size_hint)
     }
 
     /// Duplicate in a new memory mapping.
@@ -396,7 +399,7 @@ impl Mmap {
             copy_size = usize::max(copy_size, size_hint);
         }
 
-        let mut new = Self::accessible_reserved(copy_size, self.total_size)?;
+        let mut new = Self::accessible_reserved(copy_size, self.total_size, None)?;
         new.as_mut_slice_arbitary(copy_size)
             .copy_from_slice(self.as_slice_arbitary(copy_size));
         Ok(new)
@@ -406,15 +409,15 @@ impl Mmap {
 impl Drop for Mmap {
     #[cfg(not(target_os = "windows"))]
     fn drop(&mut self) {
-        if self.len != 0 {
+        if self.len() != 0 {
             log::trace!(
                 "Memory unmapping {} bytes at {:#X}-{:#X}",
-                self.len,
+                self.len(),
                 self.ptr,
-                self.ptr + self.len
+                self.ptr + self.len()
             );
 
-            let r = unsafe { libc::munmap(self.ptr as *mut libc::c_void, self.len) };
+            let r = unsafe { libc::munmap(self.ptr as *mut libc::c_void, self.len()) };
             assert_eq!(r, 0, "munmap failed: {}", io::Error::last_os_error());
 
             if let Some(memfd) = self.memfd {

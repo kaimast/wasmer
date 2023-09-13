@@ -1124,13 +1124,13 @@ pub struct CallThreadState<'a> {
     jmp_buf: Cell<*const u8>,
     reset_guard_page: Cell<bool>,
     prev: Cell<tls::Ptr>,
-    trap_handler: &'a (dyn TrapHandler + 'a),
+    trap_handler: &'a TrapHandlerFn<'a>,
     handling_trap: Cell<bool>,
 }
 
 impl<'a> CallThreadState<'a> {
     #[inline]
-    fn new(trap_handler: &'a (dyn TrapHandler + 'a)) -> CallThreadState<'a> {
+    fn new(trap_handler: &'a TrapHandlerFn<'a>) -> CallThreadState<'a> {
         Self {
             unwind: UnsafeCell::new(MaybeUninit::uninit()),
             jmp_buf: Cell::new(ptr::null()),
@@ -1161,13 +1161,13 @@ impl<'a> CallThreadState<'a> {
             UnwindReason::Panic(panic) => std::panic::resume_unwind(panic),
         }
     }
-
+/*
     fn unwind_with(&self, reason: UnwindReason) -> ! {
         unsafe {
             (*self.unwind.get()).as_mut_ptr().write(reason);
-            wasmer_unwind(self.jmp_buf.get());
+            unwind_with(self.jmp_buf.get());
         }
-    }
+    }*/
 
     /// Trap handler using our thread-local state.
     ///
@@ -1202,12 +1202,12 @@ impl<'a> CallThreadState<'a> {
             return ptr::null();
         }
 
-        // First up see if we have a custom trap handler,
+/*        // First up see if we have a custom trap handler,
         // in which case run it. If anything handles the trap then we
         // return that the trap was handled.
         if self.trap_handler.custom_trap_handler(&call_handler) {
             return 1 as *const _;
-        }
+        }*/
 
         // TODO: stack overflow can happen at any random time (i.e. in malloc()
         // in memory.grow) and it's really hard to determine if the cause was

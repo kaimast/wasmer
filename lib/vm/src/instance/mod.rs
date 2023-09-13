@@ -762,28 +762,6 @@ impl Instance {
         let passive_data = self.passive_data.borrow();
         let data = passive_data.get(&data_index).map_or(&[][..], |d| &**d);
 
-        let current_length = unsafe { memory.vmmemory().as_ref().current_length };
-        if src
-            .checked_add(len)
-            .map_or(true, |n| n as usize > data.len())
-            || dst
-                .checked_add(len)
-                .map_or(true, |m| usize::try_from(m).unwrap() > current_length)
-        {
-            log::debug!("memory_init tried to access out of bounds destination memory at {:#X}-{:#X}, but data len is {:#X}", dst, dst.checked_add(len).unwrap_or(0), data.len());
-
-            Err(Trap::lib(TrapCode::HeapAccessOutOfBounds))
-        } else {
-            let src_slice = &data[src as usize..(src + len) as usize];
-
-            unsafe {
-                let dst_start = memory.base.add(dst as usize);
-                let dst_slice = slice::from_raw_parts_mut(dst_start, len as usize);
-                dst_slice.copy_from_slice(src_slice);
-            }
-
-            Ok(())
-        }
         let src_slice = &data[src as usize..(src + len) as usize];
         unsafe { memory.initialize_with_data(dst as usize, src_slice) }
     }
@@ -982,11 +960,16 @@ impl Instance {
         &self,
         mut imports: Imports,
         vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
-    ) -> InstanceRef {
+    ) -> VMInstance {
         let (allocator, memory_definition_locations, table_definition_locations) =
             InstanceAllocator::new(&*self.module);
 
-        let passive_data = RefCell::new(self.module.passive_data.clone());
+        let passive_data = RefCell::new(
+            self
+                .passive_data
+                .borrow()
+                .clone()
+        );
 
         let offsets = allocator.offsets().clone();
 
@@ -1001,13 +984,14 @@ impl Instance {
         // duplicate tables
         // TODO make more efficient / use mmap
         let tables = {
-            let mut tables = PrimaryMap::<LocalTableIndex, Arc<(dyn Table + 'static)>>::new();
+            let mut tables = PrimaryMap::<LocalTableIndex, InternalStoreHandle<VMTable>>::new();
             for (pos, (index, old_table)) in self.tables.iter().enumerate() {
                 assert_eq!(pos, index.index());
 
                 let table_loc = table_definition_locations[index.index()];
-                let table =
-                    LinearTable::from_definition(old_table.ty(), old_table.style(), table_loc)
+                let old_table = old_table.get(self.context.as_ref().unwrap());
+                let mut table =
+                    VMTable::from_definition(old_table.ty(), old_table.style(), table_loc)
                         .expect("Failed to create table");
 
                 // Note, most of this will be overwritten later by initialize_tables
@@ -1021,7 +1005,8 @@ impl Instance {
                     index.index()
                 );
 
-                tables.push(Arc::new(table));
+                let store = self.context.as_mut().unwrap();
+                tables.push(InternalStoreHandle::new(store, table));
             }
 
             tables.into_boxed_slice()
@@ -1035,35 +1020,27 @@ impl Instance {
 
                 let mem_loc = memory_definition_locations[index.index()];
                 let memcopy = memory
+                    .get(self.context.as_ref().unwrap())
                     .duplicate(mem_loc)
                     .expect("Failed to duplicate memory");
-                memories.push(memcopy);
+
+                let store = self.context.as_mut().unwrap();
+                memories.push(InternalStoreHandle::new(store, VMMemory(memcopy)));
             }
 
             memories.into_boxed_slice()
         };
-
-        /* let memories = {
-            let mut memories = PrimaryMap::<LocalMemoryIndex, Arc<dyn Memory>>::new();
-            for (pos, (index, old_mem)) in self.memories.iter().enumerate() {
-                assert_eq!(pos, index.index());
-
-                let mem_loc = memory_definition_locations[index.index()];
-                let memory = crate::LinearMemory::from_definition(&old_mem.ty(), old_mem.style(), mem_loc).unwrap();
-
-                memories.push(Arc::new(memory));
-            }
-
-            memories.into_boxed_slice()
-        };*/
 
         log::trace!("Cloned {} memories", memories.len());
 
         let globals = {
             let mut globals = PrimaryMap::new();
             for (_index, old) in self.globals.iter() {
-                let global = Global::new(*old.ty());
-                globals.push(Arc::new(global));
+                let old = old.get(self.context.as_ref().unwrap());
+                let global = VMGlobal::new(*old.ty());
+
+                let store = self.context.as_mut().unwrap();
+                globals.push(InternalStoreHandle::new(store, global));
             }
 
             globals.into_boxed_slice()
@@ -1071,11 +1048,11 @@ impl Instance {
 
         let vmctx_globals = globals
             .values()
-            .map(|m| m.vmglobal())
+            .map(|m| m.get(self.context.as_ref().unwrap()).vmglobal())
             .collect::<PrimaryMap<LocalGlobalIndex, _>>()
             .into_boxed_slice();
 
-        let mut instance_ref = {
+        let mut instance_hdl = {
             // use dummy value to create an instance so we can get the vmctx pointer
             let funcrefs = PrimaryMap::new().into_boxed_slice();
 
@@ -1088,21 +1065,22 @@ impl Instance {
                 funcrefs,
                 globals,
                 passive_data,
+                context: self.context.clone(),
                 functions: self.functions.clone(),
                 function_call_trampolines: self.function_call_trampolines.clone(),
+                imported_funcrefs: self.imported_funcrefs.clone(),
                 passive_elements: Default::default(),
-                host_state: self.host_state.clone(),
-                imported_function_envs: imports.get_imported_function_envs(),
                 vmctx: VMContext {},
             };
 
-            allocator.write_instance(instance)
+            allocator.into_vminstance(instance)
         };
 
+        let instance = instance_hdl.instance.as_mut();
+
         // The new, duplicated instance
-        let instance = instance_ref.as_mut().unwrap();
         let parent_vmctx_ptr = self.vmctx_ptr();
-        let vmctx_ptr = instance.vmctx_ptr();
+        let vmctx_ptr = instance_hdl.vmctx_ptr();
 
         assert_ne!(vmctx_ptr, parent_vmctx_ptr);
 
@@ -1122,11 +1100,13 @@ impl Instance {
         }*/
 
         // Set the funcrefs after we've built the instance
-        instance.funcrefs = build_funcrefs(
-            &*instance.module,
+        (instance.funcrefs, instance.imported_funcrefs) = build_funcrefs(
+            &instance.module,
+            instance.context.as_ref().unwrap(),
             &imports,
             &instance.functions,
             &vmshared_signatures,
+            &instance.function_call_trampolines,
             vmctx_ptr,
         );
 
@@ -1184,7 +1164,7 @@ impl Instance {
         initialize_passive_elements(instance);
         initialize_globals(instance);
 
-        instance_ref
+        instance_hdl
     }
 }
 
@@ -1454,7 +1434,7 @@ impl VMInstance {
 
         log::trace!(
             "Exporting function with vmcontext at {:#X}",
-            instance_ref.vmctx_ptr() as usize
+            instance.vmctx_ptr() as usize
         );
 
         match export {
@@ -1592,23 +1572,8 @@ impl VMInstance {
         imports: Imports,
         vmshared_signatures: &BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
     ) -> Self {
-        let iref = self.instance().as_ref();
-        let instance = iref.duplicate(imports, vmshared_signatures);
-
-        Self { instance }
-    }
-
-    /// TODO
-    pub fn finish_duplication(&self, _data_initializers: &[DataInitializer<'_>]) {
-        let iref = self.instance().as_ref();
-        let vmctx_ptr = iref.vmctx_ptr();
-
-        log::trace!(
-            "Finishing duplication for instance with vmctx {:#X}",
-            vmctx_ptr as usize
-        );
-        initialize_tables(iref).expect("init_tables");
-        //initialize_memories(iref, data_initializers).unwrap();
+        let iref = self.instance();
+        iref.duplicate(imports, vmshared_signatures)
     }
 }
 
