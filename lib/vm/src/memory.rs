@@ -273,7 +273,7 @@ impl LinearMemory {
         };
         let minimum_bytes = minimum_pages.bytes().0;
         let request_bytes = minimum_bytes.checked_add(offset_guard_bytes).unwrap();
-        let mapped_pages = memory.maximum_pages;
+        let mapped_pages = memory.maximum;
         let mapped_bytes = mapped_pages.bytes();
 
         let mut mmap = WasmMmap {
