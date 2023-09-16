@@ -236,7 +236,7 @@ impl LinearMemory {
             });
         }
         // `maximum` cannot be set to more than `65536` pages.
-        if let Some(max) = memory.maximum {
+        let maximum_pages = if let Some(max) = memory.maximum {
             if max > Pages::max_value() {
                 return Err(MemoryError::MaximumMemoryTooLarge {
                     max_requested: max,
@@ -251,7 +251,10 @@ impl LinearMemory {
                     ),
                 });
             }
-        }
+            max
+        } else {
+            Pages::max_value()
+        };
 
         let offset_guard_bytes = style.offset_guard_size() as usize;
 
@@ -273,7 +276,7 @@ impl LinearMemory {
         };
         let minimum_bytes = minimum_pages.bytes().0;
         let request_bytes = minimum_bytes.checked_add(offset_guard_bytes).unwrap();
-        let mapped_pages = memory.maximum;
+        let mapped_pages = maximum_pages;
         let mapped_bytes = mapped_pages.bytes();
 
         let mut mmap = WasmMmap {
