@@ -267,20 +267,13 @@ impl LinearMemory {
                 MemoryStyle::Static { .. } => true,
             };
 
-        let minimum_pages = match style {
-            MemoryStyle::Dynamic { .. } => memory.minimum,
-            MemoryStyle::Static { bound, .. } => {
-                assert_ge!(*bound, memory.minimum);
-                *bound
-            }
-        };
-        let minimum_bytes = minimum_pages.bytes().0;
-        let request_bytes = minimum_bytes.checked_add(offset_guard_bytes).unwrap();
-        let mapped_pages = maximum_pages;
-        let mapped_bytes = mapped_pages.bytes();
+        let reserved_bytes = maximum_pages.bytes().0;
+
+        let accessible_pages = memory.minimum;
+        let accessible_bytes = accessible_pages.bytes().0;
 
         let mut mmap = WasmMmap {
-            alloc: Mmap::accessible_reserved(mapped_bytes.0, request_bytes, None)
+            alloc: Mmap::accessible_reserved(accessible_bytes, reserved_bytes, None)
                 .map_err(MemoryError::Region)?,
             size: memory.minimum,
         };
